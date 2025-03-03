@@ -70,7 +70,8 @@ void KoopaEngine::BeginFrame()
 
     glm::mat4 view = this->camera->GetViewMatrix();
     glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-    this->renderer->SetCameraMatrices(view, projection);
+    this->renderer->SetCameraMatrices(view, projection, this->camera->position);
+
 }
 
 void KoopaEngine::EndFrame()
@@ -82,6 +83,16 @@ void KoopaEngine::EndFrame()
 float KoopaEngine::GetCurrentFrame()
 {
     return this->currentFrame;
+}
+
+void KoopaEngine::SetCurrentDiffuseTexture(const char* path)
+{
+    this->renderer->SetCurrentDiffuse(path);
+}
+
+void KoopaEngine::ClearScreen(Vec4 color)
+{
+    this->renderer->ClearScreen(color);
 }
 
 
@@ -98,6 +109,11 @@ void KoopaEngine::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 void KoopaEngine::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     this->renderer->DrawPlane(pos, size, rotation);
+}
+
+void KoopaEngine::DrawLightsDebug()
+{
+    this->renderer->DrawLightsDebug();
 }
 
 void KoopaEngine::framebuffer_size_callback(GLFWwindow* window, int width, int height)

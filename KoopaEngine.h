@@ -20,6 +20,10 @@ public:
     void EndFrame();
     float GetCurrentFrame();
 
+    void SetCurrentDiffuseTexture(const char* path);
+
+    void ClearScreen(Vec4 color);
+
     void DrawTriangle(Vec3 pos = { 0.0f, 0.0f, 0.0f }, 
                         Vec4 rotation = {0.0f, 1.0f, 0.0f, 0.0f});
 
@@ -30,6 +34,8 @@ public:
     void DrawPlane(Vec3 pos = { 0,0,0 }, 
                 Vec3 size = { 1,1,1 }, 
                 Vec4 rotation = { 0,1,0,0 });
+
+    void DrawLightsDebug();
 
 
 private:

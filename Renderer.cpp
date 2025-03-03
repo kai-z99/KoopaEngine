@@ -17,11 +17,63 @@ Renderer::Renderer()
 
 	this->SetupBuffers();
     this->shader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
+    this->shader->use();
+
+    this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
 
     //temp
     this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
 
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentTexture"), 0); //GL_TEXTIRE0
+
+    //temp
+    PointLight p0 = PointLight();
+    p0.isActive = true;
+    p0.color = { 1.0f, 1.0f, 1.0f };
+    p0.position = { 1.0f, 4.0f, 0.0f };
+    p0.intensity = 1.0f;
+
+    PointLight p1 = PointLight();
+    p1.isActive = true;
+    p1.color = { 0.0f, 1.0f, 0.0f };
+    p1.position = { -1.0f, 1.0f, 0.0f };
+    p1.intensity = 1.0f;
+
+    PointLight p2 = PointLight();
+    p2.isActive = true;
+    p2.color = { 0.0f, 0.0f, 1.0f };
+    p2.position = { 1.0f, 3.0f, 2.0f };
+    p2.intensity = 1.0f;
+
+    PointLight p3 = PointLight();
+    p3.isActive = true;
+    p3.color = { 1.0f, 0.0f, 0.0f };
+    p3.position = { 0.0f, -3.0f, 0.0f };
+    p3.intensity = 1.0f;
+
+    this->pointLights[0] = p0;
+    this->pointLights[1] = p1;
+    this->pointLights[2] = p2;
+    this->pointLights[3] = p3;
+
+    for (unsigned int i = 0; i < 4; i++)
+    {
+        std::string s = "pointLights[" + std::to_string(i) + "].position";
+        const char* cs = s.c_str();
+        glUniform3fv(glGetUniformLocation(this->shader->ID, cs), 1, glm::value_ptr(this->pointLights[i].position));
+
+        s = "pointLights[" + std::to_string(i) + "].color";
+        const char* csc = s.c_str();
+        glUniform3fv(glGetUniformLocation(this->shader->ID, csc), 1, glm::value_ptr(this->pointLights[i].color));
+
+        s = "pointLights[" + std::to_string(i) + "].isActive";
+        const char* csa = s.c_str();
+        glUniform1i(glGetUniformLocation(this->shader->ID, csa), this->pointLights[i].isActive);
+
+        s = "pointLights[" + std::to_string(i) + "].intensity";
+        const char* csi = s.c_str();
+        glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[i].intensity);
+    }    
 }
 
 Renderer::~Renderer()
@@ -41,8 +93,15 @@ void Renderer::ClearScreen(Vec4 col)
 
 void Renderer::SetCurrentDiffuse(const char* path)
 {
-    //TEMP , DONT WRITE A TEXTURE EVERY FRAME
-    this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
+    auto it = this->textureToID.find(path);
+
+    if (it == this->textureToID.end())
+    {
+        unsigned int textureID = this->LoadTexture(path);
+        this->textureToID[path] = textureID;
+    }
+
+    this->currentDiffuseTexture = this->textureToID[path];
 }
 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
@@ -96,11 +155,33 @@ void Renderer::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
     glEnable(GL_CULL_FACE);
 }
 
-void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+void Renderer::DrawLightsDebug()
+{
+    this->debugLightShader->use();
+    
+    glBindVertexArray(cubeVAO);
+    for (int i = 0; i < 4; i++)
+    {
+        PointLight curr = this->pointLights[i];
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(curr.position.x, curr.position.y, curr.position.z));
+        model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
+        glUniformMatrix4fv(glGetUniformLocation(this->debugLightShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniform3fv(glGetUniformLocation(debugLightShader->ID, "lightColor"), 1, glm::value_ptr(curr.color));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+}
+
+void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
     shader->use();
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform3fv(glGetUniformLocation(shader->ID, "viewPos"), 1, glm::value_ptr(position));
+
+    debugLightShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(debugLightShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(debugLightShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));    
 }
 
 void Renderer::SetupBuffers()
@@ -117,7 +198,7 @@ void Renderer::SetupTriangleBuffers()
      0.5f, -0.5f, 0.0f,  // bottom right
     -0.5f, -0.5f, 0.0f   // bottom left
     };
-
+        
     glGenVertexArrays(1, &this->triangleVAO);
     glGenBuffers(1, &this->triangleVBO);
 
