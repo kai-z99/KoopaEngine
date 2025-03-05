@@ -47,7 +47,8 @@ KoopaEngine::KoopaEngine() {
     this->renderer = new Renderer();
 }
 
-KoopaEngine::~KoopaEngine() {
+KoopaEngine::~KoopaEngine() 
+{
     glfwDestroyWindow(window);
     glfwTerminate();
     delete this->renderer;
@@ -72,10 +73,14 @@ void KoopaEngine::BeginFrame()
     glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     this->renderer->SetCameraMatrices(view, projection, this->camera->position);
 
+    //Set framebuffer to post processing one to generate image.
+
 }
 
 void KoopaEngine::EndFrame()
 {
+    //Draw whats in final framebuffer
+    this->renderer->SetAllPointLightsToFalse(); //dont draw lights from last frame unless active
     glfwSwapBuffers(window);
     glfwPollEvents();
 }
@@ -95,7 +100,6 @@ void KoopaEngine::ClearScreen(Vec4 color)
     this->renderer->ClearScreen(color);
 }
 
-
 void KoopaEngine::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
     this->renderer->DrawTriangle(pos, rotation);
@@ -111,9 +115,20 @@ void KoopaEngine::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
     this->renderer->DrawPlane(pos, size, rotation);
 }
 
+void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity)
+{
+    this->renderer->AddPointLightToFrame(pos, col, intensity);
+}
+
 void KoopaEngine::DrawLightsDebug()
 {
     this->renderer->DrawLightsDebug();
+}
+
+void KoopaEngine::DrawFinalQuad()
+{
+    //set framebuffer to 0
+    //draw quad on screen with final image, bloom, ssao, etc
 }
 
 void KoopaEngine::framebuffer_size_callback(GLFWwindow* window, int width, int height)

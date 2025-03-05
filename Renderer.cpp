@@ -15,7 +15,7 @@ Renderer::Renderer()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-	this->SetupBuffers();
+	this->SetupVertexBuffers();
     this->shader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->shader->use();
 
@@ -27,53 +27,9 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentTexture"), 0); //GL_TEXTIRE0
 
     //temp
-    PointLight p0 = PointLight();
-    p0.isActive = true;
-    p0.color = { 1.0f, 1.0f, 1.0f };
-    p0.position = { 1.0f, 4.0f, 0.0f };
-    p0.intensity = 1.0f;
+    this->InitializePointLights();
 
-    PointLight p1 = PointLight();
-    p1.isActive = true;
-    p1.color = { 0.0f, 1.0f, 0.0f };
-    p1.position = { -1.0f, 1.0f, 0.0f };
-    p1.intensity = 1.0f;
-
-    PointLight p2 = PointLight();
-    p2.isActive = true;
-    p2.color = { 0.0f, 0.0f, 1.0f };
-    p2.position = { 1.0f, 3.0f, 2.0f };
-    p2.intensity = 1.0f;
-
-    PointLight p3 = PointLight();
-    p3.isActive = true;
-    p3.color = { 1.0f, 0.0f, 0.0f };
-    p3.position = { 0.0f, -3.0f, 0.0f };
-    p3.intensity = 1.0f;
-
-    this->pointLights[0] = p0;
-    this->pointLights[1] = p1;
-    this->pointLights[2] = p2;
-    this->pointLights[3] = p3;
-
-    for (unsigned int i = 0; i < 4; i++)
-    {
-        std::string s = "pointLights[" + std::to_string(i) + "].position";
-        const char* cs = s.c_str();
-        glUniform3fv(glGetUniformLocation(this->shader->ID, cs), 1, glm::value_ptr(this->pointLights[i].position));
-
-        s = "pointLights[" + std::to_string(i) + "].color";
-        const char* csc = s.c_str();
-        glUniform3fv(glGetUniformLocation(this->shader->ID, csc), 1, glm::value_ptr(this->pointLights[i].color));
-
-        s = "pointLights[" + std::to_string(i) + "].isActive";
-        const char* csa = s.c_str();
-        glUniform1i(glGetUniformLocation(this->shader->ID, csa), this->pointLights[i].isActive);
-
-        s = "pointLights[" + std::to_string(i) + "].intensity";
-        const char* csi = s.c_str();
-        glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[i].intensity);
-    }    
+    this->currentFramePointLightCount = 0;
 }
 
 Renderer::~Renderer()
@@ -83,6 +39,7 @@ Renderer::~Renderer()
     glDeleteVertexArrays(1, &cubeVAO);
     glDeleteBuffers(1, &cubeVBO);
     delete this->shader;
+    delete this->debugLightShader;
 }
 
 void Renderer::ClearScreen(Vec4 col)
@@ -160,9 +117,10 @@ void Renderer::DrawLightsDebug()
     this->debugLightShader->use();
     
     glBindVertexArray(cubeVAO);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
         PointLight curr = this->pointLights[i];
+        if (!curr.isActive) continue;
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(curr.position.x, curr.position.y, curr.position.z));
         model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
@@ -171,6 +129,108 @@ void Renderer::DrawLightsDebug()
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 }
+
+void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
+{
+    if (this->currentFramePointLightCount + 1 <= MAX_POINT_LIGHTS)
+    {
+        this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity);
+        this->currentFramePointLightCount++;
+    }
+    else
+    {
+        std::cout << "ERROR: Max pointlights exceeded\n";
+    }
+    
+}
+
+void Renderer::SetAllPointLightsToFalse()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        this->pointLights[i].isActive = false;
+    }
+    this->currentFramePointLightCount = 0;
+}
+
+void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity)
+{
+    this->pointLights[index].position = {pos.x, pos.y, pos.z};
+    this->pointLights[index].color = { col.r, col.g, col.b };
+    this->pointLights[index].intensity = intensity;
+    this->pointLights[index].isActive = true;
+
+    this->shader->use();
+
+    std::string s = "pointLights[" + std::to_string(index) + "].position";
+    const char* cs = s.c_str();
+    glUniform3fv(glGetUniformLocation(this->shader->ID, cs), 1, glm::value_ptr(this->pointLights[index].position));
+
+    s = "pointLights[" + std::to_string(index) + "].color";
+    const char* csc = s.c_str();
+    glUniform3fv(glGetUniformLocation(this->shader->ID, csc), 1, glm::value_ptr(this->pointLights[index].color));
+
+    s = "pointLights[" + std::to_string(index) + "].isActive";
+    const char* csa = s.c_str();
+    glUniform1i(glGetUniformLocation(this->shader->ID, csa), this->pointLights[index].isActive);
+
+    s = "pointLights[" + std::to_string(index) + "].intensity";
+    const char* csi = s.c_str();
+    glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[index].intensity);
+}
+
+void Renderer::InitializePointLights()
+{
+    PointLight p0 = PointLight();
+    p0.isActive = false;
+    p0.color = { 1.0f, 1.0f, 1.0f };
+    p0.position = { 0.0f, 0.0f, 0.0f };
+    p0.intensity = 1.0f;
+
+    PointLight p1 = PointLight();
+    p1.isActive = false;
+    p1.color = { 1.0f, 1.0f, 1.0f };
+    p1.position = { 0.0f, 0.0f, 0.0f };
+    p1.intensity = 1.0f;
+
+    PointLight p2 = PointLight();
+    p2.isActive = false;
+    p2.color = { 1.0f, 1.0f, 1.0f };
+    p2.position = { 0.0f, 0.0f, 0.0f };
+    p2.intensity = 1.0f;
+
+    PointLight p3 = PointLight();
+    p3.isActive = false;
+    p3.color = { 1.0f, 1.0f, 1.0f };
+    p3.position = { 0.0f, 0.0f, 0.0f };
+    p3.intensity = 1.0f;
+
+    this->pointLights[0] = p0;
+    this->pointLights[1] = p1;
+    this->pointLights[2] = p2;
+    this->pointLights[3] = p3;
+
+    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
+    {
+        std::string s = "pointLights[" + std::to_string(i) + "].position";
+        const char* cs = s.c_str();
+        glUniform3fv(glGetUniformLocation(this->shader->ID, cs), 1, glm::value_ptr(this->pointLights[i].position));
+
+        s = "pointLights[" + std::to_string(i) + "].color";
+        const char* csc = s.c_str();
+        glUniform3fv(glGetUniformLocation(this->shader->ID, csc), 1, glm::value_ptr(this->pointLights[i].color));
+
+        s = "pointLights[" + std::to_string(i) + "].isActive";
+        const char* csa = s.c_str();
+        glUniform1i(glGetUniformLocation(this->shader->ID, csa), this->pointLights[i].isActive);
+
+        s = "pointLights[" + std::to_string(i) + "].intensity";
+        const char* csi = s.c_str();
+        glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[i].intensity);
+    }
+
+}
+
 
 void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
@@ -184,7 +244,7 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
     glUniformMatrix4fv(glGetUniformLocation(debugLightShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));    
 }
 
-void Renderer::SetupBuffers()
+void Renderer::SetupVertexBuffers()
 {
 	this->SetupTriangleBuffers();
 	this->SetupCubeBuffers();

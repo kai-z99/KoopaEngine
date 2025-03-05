@@ -35,7 +35,12 @@ public:
                 Vec3 size = { 1,1,1 }, 
                 Vec4 rotation = { 0,1,0,0 });
 
+    void DrawPointLight(Vec3 pos = {0,0,0},
+                    Vec3 col = {1,1,1},
+                    float intensity = 1.0f);
+
     void DrawLightsDebug();
+    void DrawFinalQuad();
 
 
 private:

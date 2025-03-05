@@ -22,9 +22,18 @@ public:
 
     void DrawLightsDebug();
 
+    void AddPointLightToFrame(Vec3 pos = { 0,0,0 },
+                            Vec3 col = { 0,0,0 },
+                            float intensity = 1.0f);
+
+    void SetAllPointLightsToFalse();
+
     void SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
 
+    
 private:
+    const unsigned int MAX_POINT_LIGHTS = 4;
+
     Shader* shader; 
     Shader* debugLightShader;
 
@@ -32,6 +41,7 @@ private:
     unsigned int LoadTexture(const char* path);
     std::unordered_map<const char*, unsigned int> textureToID;
 
+    unsigned int currentFramePointLightCount;
     struct PointLight
     {
         glm::vec3 position;
@@ -40,12 +50,19 @@ private:
         bool isActive;
     };
     PointLight pointLights[4];
+    void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity);
+    void InitializePointLights();
 
-    void SetupBuffers();
+    void SetupVertexBuffers();
     void SetupTriangleBuffers();
     void SetupCubeBuffers();
     void SetupPlaneBuffers();
     unsigned int triangleVAO, triangleVBO, planeVBO;
     unsigned int cubeVAO, cubeVBO, planeVAO;
+
+    void SetupFramebuffers();
+    void SetupFinalImageFramebuffer();
+    //void SetupShadowMap framebuffer ...
+    // .. .. 
 
 };
