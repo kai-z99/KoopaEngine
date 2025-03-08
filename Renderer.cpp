@@ -16,18 +16,23 @@ Renderer::Renderer()
     glEnable(GL_CULL_FACE);
 
 	this->SetupVertexBuffers();
+    this->SetupFramebuffers();
     this->shader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->shader->use();
 
     this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
+    this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
 
     //temp
     this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
-
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentTexture"), 0); //GL_TEXTIRE0
 
-    //temp
+    this->screenShader->use();
+    glUniform1i(glGetUniformLocation(this->screenShader->ID, "screenTexture"), 0); //GL_TEXTIRE0
+
+    //temp?
     this->InitializePointLights();
+    this->InitializeDirLight();
 
     this->currentFramePointLightCount = 0;
 }
@@ -40,6 +45,32 @@ Renderer::~Renderer()
     glDeleteBuffers(1, &cubeVBO);
     delete this->shader;
     delete this->debugLightShader;
+}
+
+void Renderer::BeginRenderFrame()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+}
+
+void Renderer::EndRenderFrame()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    //Draw the final scene
+    this->screenShader->use();
+    glBindVertexArray(this->screenQuadVAO); //whole screen
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureColorBuffer); // main scene framebuffer texture to GL_TEXTURE0
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
+
+    this->SetAllPointLightsToFalse(); //dont draw lights from last frame unless draw is called again
+    this->dirLight.isActive = false;
 }
 
 void Renderer::ClearScreen(Vec4 col)
@@ -134,14 +165,18 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
 {
     if (this->currentFramePointLightCount + 1 <= MAX_POINT_LIGHTS)
     {
-        this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity);
+        this->SetNextPointLightProperties(this->currentFramePointLightCount, pos, col, intensity);
         this->currentFramePointLightCount++;
     }
     else
     {
         std::cout << "ERROR: Max pointlights exceeded\n";
     }
-    
+}
+
+void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity)
+{
+    this->SetDirLightProperties(dir, col, intensity);
 }
 
 void Renderer::SetAllPointLightsToFalse()
@@ -153,7 +188,7 @@ void Renderer::SetAllPointLightsToFalse()
     this->currentFramePointLightCount = 0;
 }
 
-void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity)
+void Renderer::SetNextPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity)
 {
     this->pointLights[index].position = {pos.x, pos.y, pos.z};
     this->pointLights[index].color = { col.r, col.g, col.b };
@@ -177,6 +212,22 @@ void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, f
     s = "pointLights[" + std::to_string(index) + "].intensity";
     const char* csi = s.c_str();
     glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[index].intensity);
+}
+
+void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity)
+{
+    this->dirLight.direction = { dir.x, dir.y, dir.z };
+    this->dirLight.color = {col.r, col.g, col.b};
+    this->dirLight.intensity = intensity;
+    this->dirLight.isActive = true;
+
+    this->shader->use();
+
+    //send to sahder uniforms
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
+    glUniform1f(glGetUniformLocation(this->shader->ID, "dirLight.intensity"), dirLight.intensity);
+    glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
 }
 
 void Renderer::InitializePointLights()
@@ -228,9 +279,21 @@ void Renderer::InitializePointLights()
         const char* csi = s.c_str();
         glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[i].intensity);
     }
-
 }
 
+void Renderer::InitializeDirLight()
+{
+    DirLight d = DirLight();
+    d.direction = { 0.5f, -1.0f, 0.5f };
+    d.color = { 1.0f, 1.0f, 1.0f };
+    d.intensity = 1.0f;
+    d.isActive = false;
+
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
+    glUniform1f(glGetUniformLocation(this->shader->ID, "dirLight.intensity"), dirLight.intensity);
+    glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
+}
 
 void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
@@ -244,11 +307,96 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
     glUniformMatrix4fv(glGetUniformLocation(debugLightShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));    
 }
 
-void Renderer::SetupVertexBuffers()
+void Renderer::SetupFramebuffers()
 {
-	this->SetupTriangleBuffers();
-	this->SetupCubeBuffers();
-    this->SetupPlaneBuffers();
+    this->SetupFinalImageFramebuffer();
+}
+
+void Renderer::SetupFinalImageFramebuffer()
+{
+    //create and bind
+    glGenFramebuffers(1, &this->finalImageFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO);
+
+    //texture color buffer attachment
+    glGenTextures(1, &this->finalImageTextureColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureColorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); //create a new RGB texture with NULL as its data
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->finalImageTextureColorBuffer, 0);
+
+    //renderbuffer attachment (depth/stencil)
+    glGenRenderbuffers(1, &this->finalImageRBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, this->finalImageRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, 800, 600); //allocate memory 
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, this->finalImageRBO);
+
+    //finish
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+}
+
+unsigned int Renderer::LoadTexture(char const* path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        GLenum internalFormat;
+        if (nrComponents == 1)
+        {
+            format = GL_RED;
+            internalFormat = GL_RED;
+        }
+        else if (nrComponents == 3)
+        {
+            internalFormat = GL_RGB;
+            format = GL_RGB;
+        }
+
+        else if (nrComponents == 4)
+        {
+            internalFormat = GL_RGBA;
+            format = GL_RGBA;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        if (format == GL_RGBA)
+        {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        else
+        {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        }
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
 }
 
 void Renderer::SetupTriangleBuffers()
@@ -258,7 +406,7 @@ void Renderer::SetupTriangleBuffers()
      0.5f, -0.5f, 0.0f,  // bottom right
     -0.5f, -0.5f, 0.0f   // bottom left
     };
-        
+
     glGenVertexArrays(1, &this->triangleVAO);
     glGenBuffers(1, &this->triangleVBO);
 
@@ -275,6 +423,14 @@ void Renderer::SetupTriangleBuffers()
     // Unbind (optional)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+}
+
+void Renderer::SetupVertexBuffers()
+{
+    this->SetupTriangleBuffers();
+    this->SetupCubeBuffers();
+    this->SetupPlaneBuffers();
+    this->SetupScreenQuadBuffers();
 }
 
 void Renderer::SetupCubeBuffers()
@@ -365,14 +521,14 @@ void Renderer::SetupCubeBuffers()
 void Renderer::SetupPlaneBuffers()
 {
     float planeVertices[] = {
-        // positions           // normals         // tex coords             // tangents
-        -15.0f,  -0.5f,  15.0f,    0.0f,  1.0f,  0.0f,    0.0f, 0.0f,    1.0f, 0.0f, 0.0f,
-         15.0f,  -0.5f,  15.0f,    0.0f,  1.0f,  0.0f,    1.0f, 0.0f,    1.0f, 0.0f, 0.0f,
-         15.0f,  -0.5f, -15.0f,    0.0f,  1.0f,  0.0f,    1.0f, 1.0f,    1.0f, 0.0f, 0.0f,
+        // positions           // normals              // tex coords       // tangents
+        -0.5f,    0.0f,  0.5f,    0.0f,  1.0f,  0.0f,    0.0f, 0.0f,    1.0f, 0.0f, 0.0f,
+         0.5f,    0.0f,  0.5f,    0.0f,  1.0f,  0.0f,    1.0f, 0.0f,    1.0f, 0.0f, 0.0f,
+         0.5f,    0.0f,  -0.5f,   0.0f,  1.0f,  0.0f,    1.0f, 1.0f,    1.0f, 0.0f, 0.0f,
 
-         15.0f,  -0.5f, -15.0f,    0.0f,  1.0f,  0.0f,    1.0f, 1.0f,    1.0f, 0.0f, 0.0f,
-        -15.0f,  -0.5f, -15.0f,    0.0f,  1.0f,  0.0f,    0.0f, 1.0f,    1.0f, 0.0f, 0.0f,
-        -15.0f,  -0.5f,  15.0f,    0.0f,  1.0f,  0.0f,    0.0f, 0.0f,    1.0f, 0.0f, 0.0f,
+         0.5f,    0.0f,  -0.5f,   0.0f,  1.0f,  0.0f,    1.0f, 1.0f,    1.0f, 0.0f, 0.0f,
+        -0.5f,    0.0f,  -0.5f,   0.0f,  1.0f,  0.0f,    0.0f, 1.0f,    1.0f, 0.0f, 0.0f,
+        -0.5f,    0.0f,   0.5f,   0.0f,  1.0f,  0.0f,    0.0f, 0.0f,    1.0f, 0.0f, 0.0f,
     };
 
     glGenVertexArrays(1, &this->planeVAO);
@@ -395,63 +551,30 @@ void Renderer::SetupPlaneBuffers()
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
 
     glBindVertexArray(0);
-
-
 }
 
-unsigned int Renderer::LoadTexture(char const* path)
+void Renderer::SetupScreenQuadBuffers()
 {
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
+    float quadVertices[] = {
+        // positions   // texCoords
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
 
-    int width, height, nrComponents;
-    unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
-    if (data)
-    {
-        GLenum format;
-        GLenum internalFormat;
-        if (nrComponents == 1)
-        {
-            format = GL_RED;
-            internalFormat = GL_RED;
-        }
-        else if (nrComponents == 3)
-        {
-            internalFormat = GL_RGB;
-            format = GL_RGB;
-        }
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f, 1.0f
+    };
 
-        else if (nrComponents == 4)
-        {
-            internalFormat = GL_RGBA;
-            format = GL_RGBA;
-        }
+    glGenVertexArrays(1, &this->screenQuadVAO);
+    glGenBuffers(1, &this->screenQuadVBO);
+    glBindVertexArray(this->screenQuadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, this->screenQuadVBO);
 
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        if (format == GL_RGBA)
-        {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        else
-        {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        }
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
-        stbi_image_free(data);
-    }
-
-    return textureID;
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0); //pos
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1); //tex
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glBindVertexArray(0);
 }

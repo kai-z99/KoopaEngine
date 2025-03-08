@@ -15,6 +15,7 @@ namespace ShaderSources
     out vec2 TexCoords;
     out vec3 FragPos; //Frag pos in world position
     out vec3 ourNormal;
+    out vec3 ourTangent;
 
     void main()
     {
@@ -42,6 +43,16 @@ namespace ShaderSources
 
     vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
     uniform PointLight pointLights[4];
+    
+    struct DirLight {
+        vec3 direction;
+        vec3 color;
+        float intensity;
+        bool isActive;    
+    };
+
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+    uniform DirLight dirLight;
 
     in vec2 TexCoords;
     in vec3 ourNormal;
@@ -59,6 +70,7 @@ namespace ShaderSources
         for (int i = 0; i < 4; i++)
         {
             color += CalcPointLight(pointLights[i], normal, FragPos, viewDir);
+            color += CalcDirLight(dirLight, normal, FragPos, viewDir);
         }
     
         float gamma = 2.2;
@@ -106,6 +118,33 @@ namespace ShaderSources
 
         return (diffuse + specular);
     } 
+
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+    {
+        if (light.isActive == false)
+        {
+            return vec3(0.0f, 0.0f, 0.0f);
+        }
+
+        vec3 direction = -normalize(light.direction);
+
+        //diffuse
+        float diff = max(dot(direction, normal), 0.0f);
+
+        //spec
+        vec3 halfwayDir = normalize(direction + viewDir);
+        float spec;
+        spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
+
+        // combine results
+        float gamma = 2.2;
+        vec3 diffuseColor = pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+    
+        vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
+        vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
+
+        return (diffuse + specular);
+    }
     )";
 
     const char* fsLight = R"(
@@ -118,6 +157,36 @@ namespace ShaderSources
     {
         FragColor = vec4(lightColor, 1.0); // a cube, that doesnt acutally emit light remember its purely a visual
         //FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+    )";
+
+    const char* vsScreenQuad = R"(
+    #version 330 core
+    layout (location = 0) in vec2 aPos;
+    layout (location = 1) in vec2 aTexCoords;
+
+    out vec2 TexCoords;
+
+    void main()
+    {
+        gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0); 
+        TexCoords = aTexCoords;
+    } 
+    )";
+
+    const char* fsScreenQuad = R"(
+    #version 330 core
+    out vec4 FragColor;
+  
+    in vec2 TexCoords;
+
+    uniform sampler2D screenTexture;
+    
+
+    void main()
+    {
+        vec4 col = texture(screenTexture, TexCoords);  
+        FragColor = col;
     }
     )";
 

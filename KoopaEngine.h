@@ -39,11 +39,16 @@ public:
                     Vec3 col = {1,1,1},
                     float intensity = 1.0f);
 
-    void DrawLightsDebug();
-    void DrawFinalQuad();
+    void DrawDirLight(Vec3 dir = { 1.0f, -1.0f, 1.0f },
+                Vec3 col = { 1.0f, 1.0f, 1.0f }, 
+                float intesity = 1.0f);
 
+    void DrawLightsDebug();
+    
 
 private:
+    void DrawFinalQuad();
+
     GLFWwindow* window;
     Renderer* renderer;
     Camera* camera;

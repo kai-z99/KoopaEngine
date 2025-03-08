@@ -12,6 +12,9 @@ public:
 	Renderer();
 	~Renderer();
     
+    void BeginRenderFrame();
+    void EndRenderFrame();
+
     void ClearScreen(Vec4 col);
 
     void SetCurrentDiffuse(const char* path);
@@ -22,9 +25,9 @@ public:
 
     void DrawLightsDebug();
 
-    void AddPointLightToFrame(Vec3 pos = { 0,0,0 },
-                            Vec3 col = { 0,0,0 },
-                            float intensity = 1.0f);
+    void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity);
+
+    void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity);
 
     void SetAllPointLightsToFalse();
 
@@ -36,11 +39,14 @@ private:
 
     Shader* shader; 
     Shader* debugLightShader;
+    Shader* screenShader;
 
+    //TEXTURES
     unsigned int currentDiffuseTexture;
     unsigned int LoadTexture(const char* path);
     std::unordered_map<const char*, unsigned int> textureToID;
 
+    //LIGHTING
     unsigned int currentFramePointLightCount;
     struct PointLight
     {
@@ -50,18 +56,37 @@ private:
         bool isActive;
     };
     PointLight pointLights[4];
-    void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity);
+    void SetNextPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity);
     void InitializePointLights();
 
+    struct DirLight
+    {
+        glm::vec3 direction;
+        glm::vec3 color;
+        float intensity;
+        bool isActive;
+    };
+    DirLight dirLight;
+    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity);
+    void InitializeDirLight();
+
+    //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
     void SetupTriangleBuffers();
     void SetupCubeBuffers();
     void SetupPlaneBuffers();
+    void SetupScreenQuadBuffers();
     unsigned int triangleVAO, triangleVBO, planeVBO;
     unsigned int cubeVAO, cubeVBO, planeVAO;
+    unsigned int screenQuadVBO, screenQuadVAO;
 
+    //FRAMEBUFFERS
     void SetupFramebuffers();
     void SetupFinalImageFramebuffer();
+    unsigned int finalImageFBO; //framebuffers
+    unsigned int finalImageTextureColorBuffer;   //texture
+    unsigned int finalImageRBO;                 //renderbuffers
+
     //void SetupShadowMap framebuffer ...
     // .. .. 
 

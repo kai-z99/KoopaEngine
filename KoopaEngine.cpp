@@ -52,6 +52,8 @@ KoopaEngine::~KoopaEngine()
     glfwDestroyWindow(window);
     glfwTerminate();
     delete this->renderer;
+    delete this->camera;
+    //delete this->window; glfwDestroyWindow
     std::cout << "Engine destroyed." << std::endl;
 }
 
@@ -67,20 +69,18 @@ void KoopaEngine::BeginFrame()
     deltaTime = this->currentFrame - lastFrame;
     lastFrame = this->currentFrame;
 
-    this->renderer->ClearScreen(Vec4(1.0f, 0.5f, 0.0f, 0.4f));
-
     glm::mat4 view = this->camera->GetViewMatrix();
     glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     this->renderer->SetCameraMatrices(view, projection, this->camera->position);
 
-    //Set framebuffer to post processing one to generate image.
-
+    this->renderer->BeginRenderFrame(); //sets to screen FB
 }
 
 void KoopaEngine::EndFrame()
 {
     //Draw whats in final framebuffer
-    this->renderer->SetAllPointLightsToFalse(); //dont draw lights from last frame unless active
+    this->renderer->EndRenderFrame();
+
     glfwSwapBuffers(window);
     glfwPollEvents();
 }
@@ -118,6 +118,11 @@ void KoopaEngine::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
 void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity)
 {
     this->renderer->AddPointLightToFrame(pos, col, intensity);
+}
+
+void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity)
+{
+    this->renderer->AddDirLightToFrame(dir, col, intensity);
 }
 
 void KoopaEngine::DrawLightsDebug()
