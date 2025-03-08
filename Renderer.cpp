@@ -25,7 +25,9 @@ Renderer::Renderer()
 
     //temp
     this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
-    glUniform1i(glGetUniformLocation(this->shader->ID, "currentTexture"), 0); //GL_TEXTIRE0
+    this->currentNormalMapTexture = this->LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
+    glUniform1i(glGetUniformLocation(this->shader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->shader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
 
     this->screenShader->use();
     glUniform1i(glGetUniformLocation(this->screenShader->ID, "screenTexture"), 0); //GL_TEXTIRE0
@@ -79,7 +81,7 @@ void Renderer::ClearScreen(Vec4 col)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
-void Renderer::SetCurrentDiffuse(const char* path)
+void Renderer::AddToTextureMap(const char* path)
 {
     auto it = this->textureToID.find(path);
 
@@ -88,8 +90,18 @@ void Renderer::SetCurrentDiffuse(const char* path)
         unsigned int textureID = this->LoadTexture(path);
         this->textureToID[path] = textureID;
     }
+}
 
+void Renderer::SetCurrentDiffuse(const char* path)
+{
+    AddToTextureMap(path);
     this->currentDiffuseTexture = this->textureToID[path];
+}
+
+void Renderer::SetCurrentNormal(const char* path)
+{
+    AddToTextureMap(path);
+    this->currentNormalMapTexture = this->textureToID[path];
 }
 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
@@ -99,6 +111,8 @@ void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
     glBindVertexArray(this->triangleVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
@@ -115,6 +129,8 @@ void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
     glBindVertexArray(this->cubeVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
@@ -125,18 +141,20 @@ void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
     glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-void Renderer::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
+void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glDisable(GL_CULL_FACE); //cant cull flat things
     shader->use();
     glBindVertexArray(this->planeVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
     model = glm::rotate(model, glm::radians(rotation.w), glm::vec3(rotation.x, rotation.y, rotation.z));
-    model = glm::scale(model, glm::vec3(size.x, size.y, size.z));
+    model = glm::scale(model, glm::vec3(size.x, 1.0f, size.y)); //cant scale a plane on y
     glUniformMatrix4fv(glGetUniformLocation(this->shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
 
     glDrawArrays(GL_TRIANGLES, 0, 6);

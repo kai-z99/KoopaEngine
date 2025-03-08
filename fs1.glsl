@@ -25,7 +25,7 @@
     in vec3 ourNormal;
     in vec3 FragPos;
 
-    uniform sampler2D currentTexture;
+    uniform sampler2D currentDiffuse;
     uniform vec3 viewPos;
 
     void main()
@@ -43,7 +43,7 @@
         float gamma = 2.2;
 
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
         color += sceneAmbient;
 
         color = pow(color, vec3(1.0f / gamma)); //Gamma correction
@@ -75,7 +75,7 @@
 
         // combine results
         float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
@@ -105,7 +105,7 @@
 
         // combine results
         float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn

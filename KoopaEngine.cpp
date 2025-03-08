@@ -95,6 +95,11 @@ void KoopaEngine::SetCurrentDiffuseTexture(const char* path)
     this->renderer->SetCurrentDiffuse(path);
 }
 
+void KoopaEngine::SetCurrentNormalTexture(const char* path)
+{
+    this->renderer->SetCurrentNormal(path);
+}
+
 void KoopaEngine::ClearScreen(Vec4 color)
 {
     this->renderer->ClearScreen(color);
@@ -110,7 +115,7 @@ void KoopaEngine::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
     this->renderer->DrawCube(pos, size, rotation);
 }
 
-void KoopaEngine::DrawPlane(Vec3 pos, Vec3 size, Vec4 rotation)
+void KoopaEngine::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     this->renderer->DrawPlane(pos, size, rotation);
 }

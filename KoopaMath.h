@@ -1,5 +1,15 @@
 #pragma once
 
+struct Vec2
+{
+	union
+	{
+		struct { float x, y; };
+	};
+
+	Vec2(float x, float y) : x(x), y(y) {}
+};
+
 struct Vec3
 {
 	union

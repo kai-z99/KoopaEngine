@@ -7,6 +7,7 @@ namespace ShaderSources
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aNormal;
     layout (location = 2) in vec2 aTexCoords;
+    layout (location = 3) in vec3 aTangent;
     
     uniform mat4 model;
     uniform mat4 view;
@@ -14,8 +15,8 @@ namespace ShaderSources
 
     out vec2 TexCoords;
     out vec3 FragPos; //Frag pos in world position
-    out vec3 ourNormal;
-    out vec3 ourTangent;
+    out vec3 Normal;
+    out mat3 TBN; //TangentSpace -> WorldSpace
 
     void main()
     {
@@ -26,7 +27,11 @@ namespace ShaderSources
 
         mat3 normalMatrix = mat3(transpose(inverse(model)));
         vec3 N = normalize(normalMatrix * aNormal);
-        ourNormal = N;
+        vec3 T = normalize(normalMatrix * aTangent);
+        vec3 B = cross(N,T);
+        TBN = mat3(T,B,N);
+
+        Normal = N;
     }
     )";
 
@@ -55,28 +60,36 @@ namespace ShaderSources
     uniform DirLight dirLight;
 
     in vec2 TexCoords;
-    in vec3 ourNormal;
+    in vec3 Normal;
     in vec3 FragPos;
+    in mat3 TBN;
 
-    uniform sampler2D currentTexture;
+    uniform sampler2D currentDiffuse; //0
+    uniform sampler2D currentNormalMap; //1
     uniform vec3 viewPos;
 
     void main()
     {
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
-        vec3 normal = normalize(ourNormal);
 
+        vec3 normalFromData = normalize(Normal);
+        vec3 normalFromMap  = texture(currentNormalMap, TexCoords).rgb;
+        normalFromMap = normalFromMap * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+        normalFromMap = normalize(TBN * normalFromMap); //Tangent -> World (tbn is constucted with model matrix)
+        
         for (int i = 0; i < 4; i++)
         {
-            color += CalcPointLight(pointLights[i], normal, FragPos, viewDir);
-            color += CalcDirLight(dirLight, normal, FragPos, viewDir);
+            color += CalcPointLight(pointLights[i], normalFromMap, FragPos, viewDir);
+            
         }
+
+        color += CalcDirLight(dirLight, normalFromMap, FragPos, viewDir);
     
         float gamma = 2.2;
 
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
         color += sceneAmbient;
 
         color = pow(color, vec3(1.0f / gamma)); //Gamma correction
@@ -86,7 +99,6 @@ namespace ShaderSources
 
     vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
     {
-        //return normal;
         if (light.isActive == false)
         {
             return vec3(0.0f, 0.0f, 0.0f);
@@ -108,7 +120,7 @@ namespace ShaderSources
 
         // combine results
         float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
@@ -138,7 +150,7 @@ namespace ShaderSources
 
         // combine results
         float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentTexture, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn

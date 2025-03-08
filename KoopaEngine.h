@@ -21,6 +21,7 @@ public:
     float GetCurrentFrame();
 
     void SetCurrentDiffuseTexture(const char* path);
+    void SetCurrentNormalTexture(const char* path);
 
     void ClearScreen(Vec4 color);
 
@@ -32,7 +33,7 @@ public:
                     Vec4 rotation = { 0.0f, 1.0f, 0.0f, 0.0f });
 
     void DrawPlane(Vec3 pos = { 0,0,0 }, 
-                Vec3 size = { 1,1,1 }, 
+                Vec2 size = { 1,1 }, 
                 Vec4 rotation = { 0,1,0,0 });
 
     void DrawPointLight(Vec3 pos = {0,0,0},

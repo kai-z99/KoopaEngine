@@ -18,10 +18,11 @@ public:
     void ClearScreen(Vec4 col);
 
     void SetCurrentDiffuse(const char* path);
+    void SetCurrentNormal(const char* path);
 
 	void DrawTriangle(Vec3 pos = { 0,0,0 }, Vec4 rotation = { 0,1,0,0 });
 	void DrawCube(Vec3 pos = { 0,0,0 }, Vec3 size = { 1,1,1 }, Vec4 rotation = { 0,1,0,0 });
-    void DrawPlane(Vec3 pos = { 0,0,0 }, Vec3 size = { 1,1,1 }, Vec4 rotation = { 0,1,0,0 });
+    void DrawPlane(Vec3 pos = { 0,0,0 }, Vec2 size = { 1,1 }, Vec4 rotation = { 0,1,0,0 });
 
     void DrawLightsDebug();
 
@@ -43,8 +44,11 @@ private:
 
     //TEXTURES
     unsigned int currentDiffuseTexture;
+    unsigned int currentNormalMapTexture;
     unsigned int LoadTexture(const char* path);
     std::unordered_map<const char*, unsigned int> textureToID;
+    void AddToTextureMap(const char* path); //stores texture to map if its not already there
+
 
     //LIGHTING
     unsigned int currentFramePointLightCount;
