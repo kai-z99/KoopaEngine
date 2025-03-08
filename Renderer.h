@@ -58,9 +58,16 @@ private:
         glm::vec3 color;
         float intensity;
         bool isActive;
+
+        PointLight()
+            : position(0.0f), color(1.0f), intensity(1.0f), isActive(false) {}
+
+        PointLight(const glm::vec3& pos, const glm::vec3& col, float intensity, bool active)
+            : position(pos), color(col), intensity(intensity), isActive(active) {}
     };
     PointLight pointLights[4];
-    void SetNextPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity);
+    void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active);
+
     void InitializePointLights();
 
     struct DirLight
@@ -69,10 +76,20 @@ private:
         glm::vec3 color;
         float intensity;
         bool isActive;
+
+        DirLight()
+            : direction(0.5f, -1.0f, 0.5f), color(1.0f), intensity(1.0f), isActive(false) {}
+
+        DirLight(const glm::vec3& dir, const glm::vec3& col, float intensity, bool active)
+            : direction(dir), color(col), intensity(intensity), isActive(active) {}
     };
     DirLight dirLight;
-    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity);
+    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active);
     void InitializeDirLight();
+
+    //DRAWING
+    void BindDiffuseAndNormalTextures() const;
+    void DrawMesh(Shader& shader, unsigned int VAO, unsigned int vertexCount, const glm::mat4& modelMatrix);
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();

@@ -73,7 +73,7 @@ void Renderer::EndRenderFrame()
 
     this->SetAllPointLightsToFalse(); //dont draw lights from last frame unless draw is called again
     this->dirLight.isActive = false;
-}
+} 
 
 void Renderer::ClearScreen(Vec4 col)
 {
@@ -104,60 +104,59 @@ void Renderer::SetCurrentNormal(const char* path)
     this->currentNormalMapTexture = this->textureToID[path];
 }
 
-void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
+void Renderer::BindDiffuseAndNormalTextures() const
 {
-    glDisable(GL_CULL_FACE); //cant cull flat things
-    shader->use();
-    glBindVertexArray(this->triangleVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
+}
 
+void Renderer::DrawMesh(Shader& shader, unsigned int VAO, unsigned int vertexCount, const glm::mat4& modelMatrix)
+{
+    shader.use();
+    glBindVertexArray(VAO);
+    glUniformMatrix4fv(glGetUniformLocation(shader.ID, "model"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+    glBindVertexArray(0);
+}
+
+static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
+{
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
     model = glm::rotate(model, glm::radians(rotation.w), glm::vec3(rotation.x, rotation.y, rotation.z));
-    glUniformMatrix4fv(glGetUniformLocation(this->shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    model = glm::scale(model, glm::vec3(scale.x, scale.y, scale.z));
+    return model;
+}
 
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
+{
+    glDisable(GL_CULL_FACE); //cant cull flat things
+
+    this->BindDiffuseAndNormalTextures();
+    glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
+    this->DrawMesh(*this->shader, this->triangleVAO, 3, model);
+
     glEnable(GL_CULL_FACE);
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
-    shader->use();
-    glBindVertexArray(this->cubeVAO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
-
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
-    model = glm::rotate(model, glm::radians(rotation.w), glm::vec3(rotation.x, rotation.y, rotation.z));
-    model = glm::scale(model, glm::vec3(size.x, size.y, size.z));
-    glUniformMatrix4fv(glGetUniformLocation(this->shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
-
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    this->BindDiffuseAndNormalTextures();
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
+    this->DrawMesh(*this->shader, this->cubeVAO, 36, model);
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glDisable(GL_CULL_FACE); //cant cull flat things
-    shader->use();
-    glBindVertexArray(this->planeVAO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
 
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(pos.x, pos.y, pos.z));
-    model = glm::rotate(model, glm::radians(rotation.w), glm::vec3(rotation.x, rotation.y, rotation.z));
-    model = glm::scale(model, glm::vec3(size.x, 1.0f, size.y)); //cant scale a plane on y
-    glUniformMatrix4fv(glGetUniformLocation(this->shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    this->BindDiffuseAndNormalTextures();
+    glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
+    this->DrawMesh(*this->shader, this->planeVAO, 6, model);
 
-    glDrawArrays(GL_TRIANGLES, 0, 6);
     glEnable(GL_CULL_FACE);
 }
 
@@ -183,7 +182,8 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
 {
     if (this->currentFramePointLightCount + 1 <= MAX_POINT_LIGHTS)
     {
-        this->SetNextPointLightProperties(this->currentFramePointLightCount, pos, col, intensity);
+        this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity, true);
+        //TODO: maybe send uniforms here intead of in SetPointLightProperties?
         this->currentFramePointLightCount++;
     }
     else
@@ -194,7 +194,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
 
 void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity)
 {
-    this->SetDirLightProperties(dir, col, intensity);
+    this->SetDirLightProperties(dir, col, intensity, true);
 }
 
 void Renderer::SetAllPointLightsToFalse()
@@ -206,12 +206,12 @@ void Renderer::SetAllPointLightsToFalse()
     this->currentFramePointLightCount = 0;
 }
 
-void Renderer::SetNextPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity)
+void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active)
 {
     this->pointLights[index].position = {pos.x, pos.y, pos.z};
     this->pointLights[index].color = { col.r, col.g, col.b };
     this->pointLights[index].intensity = intensity;
-    this->pointLights[index].isActive = true;
+    this->pointLights[index].isActive = active;
 
     this->shader->use();
 
@@ -232,12 +232,12 @@ void Renderer::SetNextPointLightProperties(unsigned int index, Vec3 pos, Vec3 co
     glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[index].intensity);
 }
 
-void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity)
+void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active)
 {
     this->dirLight.direction = { dir.x, dir.y, dir.z };
     this->dirLight.color = {col.r, col.g, col.b};
     this->dirLight.intensity = intensity;
-    this->dirLight.isActive = true;
+    this->dirLight.isActive = active;
 
     this->shader->use();
 
@@ -248,31 +248,14 @@ void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity)
     glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
 }
 
+
+
 void Renderer::InitializePointLights()
 {
     PointLight p0 = PointLight();
-    p0.isActive = false;
-    p0.color = { 1.0f, 1.0f, 1.0f };
-    p0.position = { 0.0f, 0.0f, 0.0f };
-    p0.intensity = 1.0f;
-
     PointLight p1 = PointLight();
-    p1.isActive = false;
-    p1.color = { 1.0f, 1.0f, 1.0f };
-    p1.position = { 0.0f, 0.0f, 0.0f };
-    p1.intensity = 1.0f;
-
     PointLight p2 = PointLight();
-    p2.isActive = false;
-    p2.color = { 1.0f, 1.0f, 1.0f };
-    p2.position = { 0.0f, 0.0f, 0.0f };
-    p2.intensity = 1.0f;
-
     PointLight p3 = PointLight();
-    p3.isActive = false;
-    p3.color = { 1.0f, 1.0f, 1.0f };
-    p3.position = { 0.0f, 0.0f, 0.0f };
-    p3.intensity = 1.0f;
 
     this->pointLights[0] = p0;
     this->pointLights[1] = p1;
@@ -302,10 +285,6 @@ void Renderer::InitializePointLights()
 void Renderer::InitializeDirLight()
 {
     DirLight d = DirLight();
-    d.direction = { 0.5f, -1.0f, 0.5f };
-    d.color = { 1.0f, 1.0f, 1.0f };
-    d.intensity = 1.0f;
-    d.isActive = false;
 
     glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
     glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
