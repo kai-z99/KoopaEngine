@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 class Shader;
+class DrawCall;
 
 class Renderer
 {
@@ -90,6 +91,8 @@ private:
     void InitializeDirLight();
 
     //DRAWING
+    std::vector<DrawCall*> drawCalls;
+    //void DrawAll();
     void BindDiffuseAndNormalTextures() const;
     void DrawMesh(Shader& shader, unsigned int VAO, unsigned int vertexCount, const glm::mat4& modelMatrix);
 

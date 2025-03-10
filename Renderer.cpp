@@ -6,8 +6,8 @@
 #include <stb_image.h>
 
 #include "shaderSources.h"
-#include "Constants.h"
 #include "Shader.h"
+#include "DrawCall.h"
 
 #include <iostream>
 
@@ -40,6 +40,9 @@ Renderer::Renderer()
     this->InitializePointLights();
     this->InitializeDirLight();
     this->currentFramePointLightCount = 0;
+
+    //Draw call vector
+    this->drawCalls = {};
 }
 
 Renderer::~Renderer()
@@ -50,6 +53,9 @@ Renderer::~Renderer()
     glDeleteBuffers(1, &cubeVBO);
     delete this->shader;
     delete this->debugLightShader;
+    delete this->screenShader;
+    for (DrawCall* d : this->drawCalls) delete d;
+    
 }
 
 void Renderer::BeginRenderFrame()
@@ -60,6 +66,16 @@ void Renderer::BeginRenderFrame()
 
 void Renderer::EndRenderFrame()
 {
+    this->BindDiffuseAndNormalTextures();
+    //Drawing into finalImageFBO....
+    for (DrawCall* d : this->drawCalls)
+    {
+        d->SendDiffuseAndNormalProperties(this->shader);
+        d->Render(this->shader);
+    }
+
+    this->drawCalls.clear();
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     glClear(GL_COLOR_BUFFER_BIT);
@@ -80,14 +96,15 @@ void Renderer::EndRenderFrame()
     this->shader->use();
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), 0); //reset normal
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), 0); //reset diffuse
-    this->SetCurrentColorDiffuse(noTexturePink);
+    //this->SetCurrentColorDiffuse(noTexturePink);
 
 } 
 
 void Renderer::ClearScreen(Vec4 col)
 {
-    glClearColor(col.r, col.g, col.b, col.a);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClearColor(col.r, col.g, col.b, col.a); //This sets what glClear will clear as.
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //fill it with that clear color.
+    //note: All draw calls draw onto this buffer so each glClearColor will be updated.
 }
 
 void Renderer::AddToTextureMap(const char* path)
@@ -104,22 +121,30 @@ void Renderer::AddToTextureMap(const char* path)
 void Renderer::SetCurrentDiffuse(const char* path)
 {
     AddToTextureMap(path);
-    this->currentDiffuseTexture = this->textureToID[path];
-    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), true);
+    //this->currentDiffuseTexture = this->textureToID[path];
+    //glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), true);
+
+    this->drawCalls.back()->SetDiffuseMapTexture(this->textureToID[path]);
+
 }
 
 void Renderer::SetCurrentColorDiffuse(Vec3 col)
 {
+    /*
     this->shader->use();
     glUniform3fv(glGetUniformLocation(this->shader->ID, "baseColor"), 1, glm::value_ptr(glm::vec3(col.r, col.g, col.b)));
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), false);
+    */
+    this->drawCalls.back()->SetDiffuseColor(col);
 }
 
 void Renderer::SetCurrentNormal(const char* path)
 {
     AddToTextureMap(path);
-    this->currentNormalMapTexture = this->textureToID[path];
-    glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), true);
+    //this->currentNormalMapTexture = this->textureToID[path];
+    //glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), true);
+
+    this->drawCalls.back()->SetNormalMapTexture(this->textureToID[path]);
 }
 
 void Renderer::BindDiffuseAndNormalTextures() const
@@ -162,20 +187,31 @@ void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
+    /*
     this->BindDiffuseAndNormalTextures();
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
     this->DrawMesh(*this->shader, this->cubeVAO, 36, model);
+    */
+
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
+    this->drawCalls.push_back(new DrawCall(this->cubeVAO, 36, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
+    /*
     glDisable(GL_CULL_FACE); //cant cull flat things
+
 
     this->BindDiffuseAndNormalTextures();
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
     this->DrawMesh(*this->shader, this->planeVAO, 6, model);
 
     glEnable(GL_CULL_FACE);
+    */
+
+    glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
+    this->drawCalls.push_back(new DrawCall(this->planeVAO, 6, model));
 }
 
 void Renderer::DrawLightsDebug()
