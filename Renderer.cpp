@@ -6,6 +6,7 @@
 #include <stb_image.h>
 
 #include "shaderSources.h"
+#include "Constants.h"
 #include "Shader.h"
 
 #include <iostream>
@@ -15,27 +16,29 @@ Renderer::Renderer()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
+    //Static setup
 	this->SetupVertexBuffers();
     this->SetupFramebuffers();
+
+    //Main lighting shader
     this->shader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->shader->use();
-
-    this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
-    this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
-
-    //temp
     this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
     this->currentNormalMapTexture = this->LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
 
+    //Debug lighting shader
+    this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
+
+    //Final quad shader
+    this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
     this->screenShader->use();
     glUniform1i(glGetUniformLocation(this->screenShader->ID, "screenTexture"), 0); //GL_TEXTIRE0
 
-    //temp?
+    //Initialialize lighting
     this->InitializePointLights();
     this->InitializeDirLight();
-
     this->currentFramePointLightCount = 0;
 }
 
@@ -71,11 +74,14 @@ void Renderer::EndRenderFrame()
 
     glEnable(GL_DEPTH_TEST);
 
-    this->SetAndSendAllLightsToFalse(); //uniforms are sent here
+    this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
 
+    //Dont transfer SetCurrentDiffuse() to next frame.
     this->shader->use();
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), 0); //reset normal
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), 0); //reset diffuse
+    this->SetCurrentColorDiffuse(noTexturePink);
+
 } 
 
 void Renderer::ClearScreen(Vec4 col)
@@ -105,7 +111,7 @@ void Renderer::SetCurrentDiffuse(const char* path)
 void Renderer::SetCurrentColorDiffuse(Vec3 col)
 {
     this->shader->use();
-    glUniform3fv(glGetUniformLocation(this->shader->ID, "colorDiffuse"), 1, glm::value_ptr(glm::vec3(col.r, col.g, col.b)));
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "baseColor"), 1, glm::value_ptr(glm::vec3(col.r, col.g, col.b)));
     glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), false);
 }
 

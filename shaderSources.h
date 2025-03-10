@@ -66,7 +66,7 @@ namespace ShaderSources
 
     uniform sampler2D currentDiffuse; //0
     uniform sampler2D currentNormalMap; //1
-    uniform vec3 colorDiffuse; //Use this if not using a diffuse texture
+    uniform vec3 baseColor; //Use this if not using a diffuse texture
     uniform vec3 viewPos;
 
     uniform bool usingNormalMap;
@@ -133,7 +133,7 @@ namespace ShaderSources
         }
         else
         {
-            diffuseColor = colorDiffuse;
+            diffuseColor = baseColor;
         }
         
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
@@ -172,7 +172,7 @@ namespace ShaderSources
         }
         else
         {
-            diffuseColor = colorDiffuse;
+            diffuseColor = baseColor;
         }
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;

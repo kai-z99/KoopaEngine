@@ -144,6 +144,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="Constants.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="KoopaEngine.h" />
     <ClInclude Include="KoopaMath.h" />
