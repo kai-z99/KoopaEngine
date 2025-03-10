@@ -18,6 +18,7 @@ public:
     void ClearScreen(Vec4 col);
 
     void SetCurrentDiffuse(const char* path);
+    void SetCurrentColorDiffuse(Vec3 col);
     void SetCurrentNormal(const char* path);
 
 	void DrawTriangle(Vec3 pos = { 0,0,0 }, Vec4 rotation = { 0,1,0,0 });
@@ -30,7 +31,7 @@ public:
 
     void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity);
 
-    void SetAllPointLightsToFalse();
+    void SetAndSendAllLightsToFalse();
 
     void SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
 
@@ -67,7 +68,7 @@ private:
     };
     PointLight pointLights[4];
     void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active);
-
+    void SendPointLightUniforms(unsigned int index);
     void InitializePointLights();
 
     struct DirLight
@@ -85,6 +86,7 @@ private:
     };
     DirLight dirLight;
     void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active);
+    void SendDirLightUniforms();
     void InitializeDirLight();
 
     //DRAWING

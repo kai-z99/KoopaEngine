@@ -66,13 +66,17 @@ namespace ShaderSources
 
     uniform sampler2D currentDiffuse; //0
     uniform sampler2D currentNormalMap; //1
+    uniform vec3 colorDiffuse; //Use this if not using a diffuse texture
     uniform vec3 viewPos;
+
+    uniform bool usingNormalMap;
+    uniform bool usingDiffuseMap;
 
     void main()
     {
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
-
+    
         vec3 normalFromData = normalize(Normal);
         vec3 normalFromMap  = texture(currentNormalMap, TexCoords).rgb;
         normalFromMap = normalFromMap * 2.0f - 1.0f; //[0,1] -> [-1, 1]
@@ -80,11 +84,11 @@ namespace ShaderSources
         
         for (int i = 0; i < 4; i++)
         {
-            color += CalcPointLight(pointLights[i], normalFromMap, FragPos, viewDir);
+            color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
             
         }
 
-        color += CalcDirLight(dirLight, normalFromMap, FragPos, viewDir);
+        color += CalcDirLight(dirLight, (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
     
         float gamma = 2.2;
 
@@ -119,9 +123,19 @@ namespace ShaderSources
         float attenuation = 1.0 / (distance * distance); //quadratic attenuation
 
         // combine results
-        float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
-    
+
+        vec3 diffuseColor;
+        
+        if (usingDiffuseMap)
+        {
+            float gamma = 2.2;
+            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
+        }
+        else
+        {
+            diffuseColor = colorDiffuse;
+        }
+        
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
 
@@ -149,8 +163,17 @@ namespace ShaderSources
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
 
         // combine results
-        float gamma = 2.2;
-        vec3 diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 diffuseColor;
+        
+        if (usingDiffuseMap)
+        {
+            float gamma = 2.2;
+            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
+        }
+        else
+        {
+            diffuseColor = colorDiffuse;
+        }
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn

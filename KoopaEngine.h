@@ -21,6 +21,7 @@ public:
     float GetCurrentFrame();
 
     void SetCurrentDiffuseTexture(const char* path);
+    void SetCurrentDiffuseTexture(Vec3 col);
     void SetCurrentNormalTexture(const char* path);
 
     void ClearScreen(Vec4 color);

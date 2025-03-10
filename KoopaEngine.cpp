@@ -95,6 +95,11 @@ void KoopaEngine::SetCurrentDiffuseTexture(const char* path)
     this->renderer->SetCurrentDiffuse(path);
 }
 
+void KoopaEngine::SetCurrentDiffuseTexture(Vec3 col)
+{
+    this->renderer->SetCurrentColorDiffuse(col);
+}
+
 void KoopaEngine::SetCurrentNormalTexture(const char* path)
 {
     this->renderer->SetCurrentNormal(path);

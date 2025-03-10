@@ -71,8 +71,11 @@ void Renderer::EndRenderFrame()
 
     glEnable(GL_DEPTH_TEST);
 
-    this->SetAllPointLightsToFalse(); //dont draw lights from last frame unless draw is called again
-    this->dirLight.isActive = false;
+    this->SetAndSendAllLightsToFalse(); //uniforms are sent here
+
+    this->shader->use();
+    glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), 0); //reset normal
+    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), 0); //reset diffuse
 } 
 
 void Renderer::ClearScreen(Vec4 col)
@@ -96,12 +99,21 @@ void Renderer::SetCurrentDiffuse(const char* path)
 {
     AddToTextureMap(path);
     this->currentDiffuseTexture = this->textureToID[path];
+    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), true);
+}
+
+void Renderer::SetCurrentColorDiffuse(Vec3 col)
+{
+    this->shader->use();
+    glUniform3fv(glGetUniformLocation(this->shader->ID, "colorDiffuse"), 1, glm::value_ptr(glm::vec3(col.r, col.g, col.b)));
+    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), false);
 }
 
 void Renderer::SetCurrentNormal(const char* path)
 {
     AddToTextureMap(path);
     this->currentNormalMapTexture = this->textureToID[path];
+    glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), true);
 }
 
 void Renderer::BindDiffuseAndNormalTextures() const
@@ -183,7 +195,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
     if (this->currentFramePointLightCount + 1 <= MAX_POINT_LIGHTS)
     {
         this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity, true);
-        //TODO: maybe send uniforms here intead of in SetPointLightProperties?
+        SendPointLightUniforms(this->currentFramePointLightCount);
         this->currentFramePointLightCount++;
     }
     else
@@ -195,15 +207,20 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
 void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity)
 {
     this->SetDirLightProperties(dir, col, intensity, true);
+    this->SendDirLightUniforms();
 }
 
-void Renderer::SetAllPointLightsToFalse()
+void Renderer::SetAndSendAllLightsToFalse()
 {
     for (int i = 0; i < 4; i++)
     {
         this->pointLights[i].isActive = false;
+        this->SendPointLightUniforms(i);
     }
     this->currentFramePointLightCount = 0;
+
+    this->dirLight.isActive = false;
+    this->SendDirLightUniforms();
 }
 
 void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active)
@@ -212,7 +229,10 @@ void Renderer::SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, f
     this->pointLights[index].color = { col.r, col.g, col.b };
     this->pointLights[index].intensity = intensity;
     this->pointLights[index].isActive = active;
+}
 
+void Renderer::SendPointLightUniforms(unsigned int index)
+{
     this->shader->use();
 
     std::string s = "pointLights[" + std::to_string(index) + "].position";
@@ -238,17 +258,17 @@ void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool a
     this->dirLight.color = {col.r, col.g, col.b};
     this->dirLight.intensity = intensity;
     this->dirLight.isActive = active;
+}
 
+void Renderer::SendDirLightUniforms()
+{
     this->shader->use();
 
-    //send to sahder uniforms
     glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
     glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
     glUniform1f(glGetUniformLocation(this->shader->ID, "dirLight.intensity"), dirLight.intensity);
     glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
 }
-
-
 
 void Renderer::InitializePointLights()
 {
@@ -264,32 +284,14 @@ void Renderer::InitializePointLights()
 
     for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
-        std::string s = "pointLights[" + std::to_string(i) + "].position";
-        const char* cs = s.c_str();
-        glUniform3fv(glGetUniformLocation(this->shader->ID, cs), 1, glm::value_ptr(this->pointLights[i].position));
-
-        s = "pointLights[" + std::to_string(i) + "].color";
-        const char* csc = s.c_str();
-        glUniform3fv(glGetUniformLocation(this->shader->ID, csc), 1, glm::value_ptr(this->pointLights[i].color));
-
-        s = "pointLights[" + std::to_string(i) + "].isActive";
-        const char* csa = s.c_str();
-        glUniform1i(glGetUniformLocation(this->shader->ID, csa), this->pointLights[i].isActive);
-
-        s = "pointLights[" + std::to_string(i) + "].intensity";
-        const char* csi = s.c_str();
-        glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[i].intensity);
+        this->SendPointLightUniforms(i);
     }
 }
 
 void Renderer::InitializeDirLight()
 {
     DirLight d = DirLight();
-
-    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
-    glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
-    glUniform1f(glGetUniformLocation(this->shader->ID, "dirLight.intensity"), dirLight.intensity);
-    glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
+    this->SendDirLightUniforms();
 }
 
 void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
