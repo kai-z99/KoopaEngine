@@ -27,6 +27,7 @@ Renderer::Renderer()
     this->currentNormalMapTexture = this->LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
+    glUniform1i(glGetUniformLocation(this->shader->ID, "dirShadowMap"), 2); //GL_TEXTURE2
 
     //Debug lighting shader
     this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
@@ -35,6 +36,9 @@ Renderer::Renderer()
     this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
     this->screenShader->use();
     glUniform1i(glGetUniformLocation(this->screenShader->ID, "screenTexture"), 0); //GL_TEXTIRE0
+
+    //Dir shadow shader
+    this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
 
     //Initialialize lighting
     this->InitializePointLights();
@@ -47,36 +51,50 @@ Renderer::Renderer()
 
 Renderer::~Renderer()
 {
+    //VBO/VAO
     glDeleteVertexArrays(1, &triangleVAO);
     glDeleteBuffers(1, &triangleVBO);
     glDeleteVertexArrays(1, &cubeVAO);
     glDeleteBuffers(1, &cubeVBO);
+    glDeleteVertexArrays(1, &screenQuadVAO);
+    glDeleteBuffers(1, &screenQuadVBO);
+
     delete this->shader;
     delete this->debugLightShader;
     delete this->screenShader;
     for (DrawCall* d : this->drawCalls) delete d;
-    
 }
 
 void Renderer::BeginRenderFrame()
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    //glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
 void Renderer::EndRenderFrame()
 {
-    this->BindDiffuseAndNormalTextures();
+    this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
+
+    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames
+    glViewport(0, 0, 800, 600); //temp hardcode
+
     //Drawing into finalImageFBO....
     for (DrawCall* d : this->drawCalls)
     {
-        d->SendDiffuseAndNormalProperties(this->shader);
+        //Send shadowmap id to the drawcall
+        d->SetDirShadowMapTexture(this->dirShadowMapTextureDepth);
+
+        //Binds the normalmap, diffusemap, shadowmap textures. (if applicable)
+        d->BindMaterialProperties(this->shader);
+
+        //Draw with shader. (model matrix is sent here)
         d->Render(this->shader);
     }
-
     this->drawCalls.clear();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //main FB
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
     glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -84,21 +102,59 @@ void Renderer::EndRenderFrame()
     this->screenShader->use();
     glBindVertexArray(this->screenQuadVAO); //whole screen
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureColorBuffer); // main scene framebuffer texture to GL_TEXTURE0
+    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureRGB); // main scene framebuffer texture to GL_TEXTURE0
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
     glEnable(GL_DEPTH_TEST);
 
     this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
-
-    //Dont transfer SetCurrentDiffuse() to next frame.
-    this->shader->use();
-    glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), 0); //reset normal
-    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), 0); //reset diffuse
-    //this->SetCurrentColorDiffuse(noTexturePink);
-
 } 
+
+void Renderer::RenderDirShadowMap()
+{
+    //Simulate a position.
+    //TODO: This should probably follow where the camera generally is.
+    glm::vec3 lightPos = -(this->dirLight.direction) * 3.0f; 
+
+    //Snapshot properties
+    float nearPlane = 1.0f;
+    float farPlane = 10.5f;
+    float size = 10.0f; //side length of sqaure which is the shadowmap snapshot.
+
+    //This matrix creates the size of the shadowMap snapshot.
+    //Note, its a square for simplity rn.
+    glm::mat4 lightProjectionMatrix = glm::ortho(-size, size, -size, size, nearPlane, farPlane);
+    glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)); //looking at origin from "lightpos"
+
+    //Transforms a fragment to the pov of the directional light
+    glm::mat4 lightSpaceMatrix = lightProjectionMatrix * lightViewMatrix; 
+
+    glViewport(0, 0, this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT); //make sure viewport is same as the texture size
+
+    //drawing into dir shadow framebuffer texture
+    glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
+    glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer, start clean.
+
+    //Send it!
+    this->shader->use();
+    glUniformMatrix4fv(glGetUniformLocation(this->shader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+
+    this->dirShadowShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(this->dirShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+    //note: model matrix is sent in d->Render()
+
+    for (DrawCall* d : this->drawCalls)
+    {       
+        d->Render(this->dirShadowShader);
+    }
+
+}
+
+void Renderer::RenderPointShadowMap()
+{
+    //this->shadowTransforms.clear();
+}
 
 void Renderer::ClearScreen(Vec4 col)
 {
@@ -121,48 +177,18 @@ void Renderer::AddToTextureMap(const char* path)
 void Renderer::SetCurrentDiffuse(const char* path)
 {
     AddToTextureMap(path);
-    //this->currentDiffuseTexture = this->textureToID[path];
-    //glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), true);
-
     this->drawCalls.back()->SetDiffuseMapTexture(this->textureToID[path]);
-
 }
 
 void Renderer::SetCurrentColorDiffuse(Vec3 col)
 {
-    /*
-    this->shader->use();
-    glUniform3fv(glGetUniformLocation(this->shader->ID, "baseColor"), 1, glm::value_ptr(glm::vec3(col.r, col.g, col.b)));
-    glUniform1i(glGetUniformLocation(this->shader->ID, "usingDiffuseMap"), false);
-    */
     this->drawCalls.back()->SetDiffuseColor(col);
 }
 
 void Renderer::SetCurrentNormal(const char* path)
 {
     AddToTextureMap(path);
-    //this->currentNormalMapTexture = this->textureToID[path];
-    //glUniform1i(glGetUniformLocation(this->shader->ID, "usingNormalMap"), true);
-
     this->drawCalls.back()->SetNormalMapTexture(this->textureToID[path]);
-}
-
-void Renderer::BindDiffuseAndNormalTextures() const
-{
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, this->currentDiffuseTexture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, this->currentNormalMapTexture);
-}
-
-void Renderer::DrawMesh(Shader& shader, unsigned int VAO, unsigned int vertexCount, const glm::mat4& modelMatrix)
-{
-    shader.use();
-    glBindVertexArray(VAO);
-    glUniformMatrix4fv(glGetUniformLocation(shader.ID, "model"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
-    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-
-    glBindVertexArray(0);
 }
 
 static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
@@ -176,53 +202,33 @@ static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const 
 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
-    glDisable(GL_CULL_FACE); //cant cull flat things
-
-    this->BindDiffuseAndNormalTextures();
     glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
-    this->DrawMesh(*this->shader, this->triangleVAO, 3, model);
-
-    glEnable(GL_CULL_FACE);
+    this->drawCalls.push_back(new DrawCall(this->triangleVAO, 3, model));
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
-    /*
-    this->BindDiffuseAndNormalTextures();
-    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->DrawMesh(*this->shader, this->cubeVAO, 36, model);
-    */
-
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
     this->drawCalls.push_back(new DrawCall(this->cubeVAO, 36, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
-    /*
-    glDisable(GL_CULL_FACE); //cant cull flat things
-
-
-    this->BindDiffuseAndNormalTextures();
-    glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
-    this->DrawMesh(*this->shader, this->planeVAO, 6, model);
-
-    glEnable(GL_CULL_FACE);
-    */
-
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
     this->drawCalls.push_back(new DrawCall(this->planeVAO, 6, model));
+    this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
 }
 
 void Renderer::DrawLightsDebug()
 {
     this->debugLightShader->use();
-    
     glBindVertexArray(cubeVAO);
+
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
         PointLight curr = this->pointLights[i];
         if (!curr.isActive) continue;
+
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(curr.position.x, curr.position.y, curr.position.z));
         model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
@@ -237,7 +243,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
     if (this->currentFramePointLightCount + 1 <= MAX_POINT_LIGHTS)
     {
         this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity, true);
-        SendPointLightUniforms(this->currentFramePointLightCount);
+        this->SendPointLightUniforms(this->currentFramePointLightCount);
         this->currentFramePointLightCount++;
     }
     else
@@ -314,18 +320,9 @@ void Renderer::SendDirLightUniforms()
 
 void Renderer::InitializePointLights()
 {
-    PointLight p0 = PointLight();
-    PointLight p1 = PointLight();
-    PointLight p2 = PointLight();
-    PointLight p3 = PointLight();
-
-    this->pointLights[0] = p0;
-    this->pointLights[1] = p1;
-    this->pointLights[2] = p2;
-    this->pointLights[3] = p3;
-
     for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
+        this->pointLights[i] = PointLight();
         this->SendPointLightUniforms(i);
     }
 }
@@ -351,6 +348,8 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
 void Renderer::SetupFramebuffers()
 {
     this->SetupFinalImageFramebuffer();
+    this->SetupDirShadowMapFramebuffer();
+    this->SetupPointShadowMapFramebuffer();
 }
 
 void Renderer::SetupFinalImageFramebuffer()
@@ -360,13 +359,13 @@ void Renderer::SetupFinalImageFramebuffer()
     glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO);
 
     //texture color buffer attachment
-    glGenTextures(1, &this->finalImageTextureColorBuffer);
-    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureColorBuffer);
+    glGenTextures(1, &this->finalImageTextureRGB);
+    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureRGB);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); //create a new RGB texture with NULL as its data
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->finalImageTextureColorBuffer, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->finalImageTextureRGB, 0);
 
     //renderbuffer attachment (depth/stencil)
     glGenRenderbuffers(1, &this->finalImageRBO);
@@ -381,6 +380,61 @@ void Renderer::SetupFinalImageFramebuffer()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+}
+
+void Renderer::SetupDirShadowMapFramebuffer()
+{
+    //create framebuffer
+    glGenFramebuffers(1, &this->dirShadowMapFBO);
+
+    //Create texture
+    glGenTextures(1, &this->dirShadowMapTextureDepth);
+    glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); //DONT LET THE TEXTURE MAP REPEAT
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); //DONT LET THE TEXTURE MAP REPEAT
+    float borderCol[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderCol); // Instead, outside its range should just be 1.0f (furthest away, so no shadow)
+
+    //Attach texture
+    glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->dirShadowMapTextureDepth, 0);
+    glDrawBuffer(GL_NONE); //No need for color buffer
+    glReadBuffer(GL_NONE); //No need for color buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void Renderer::SetupPointShadowMapFramebuffer()
+{
+    //create framebuffer
+    glGenFramebuffers(1, &this->pointShadowMapFBO);
+    
+    //createa and bind the cube map
+    glGenTextures(1, &this->pointShadowMapTextureDepth);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointShadowMapTextureDepth);
+
+    //attach each face of the cubemap with a depth texture
+    //can't use rbo since  we have to sample the depth in the shader.
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT,
+            this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
+
+    //Set buffers
+    glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO);
+    glDrawBuffer(GL_NONE); //No need for color buffer, just depth
+    glReadBuffer(GL_NONE); //No need for color buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    //Note: texture is not attched to FB yet.
 }
 
 unsigned int Renderer::LoadTexture(char const* path)
