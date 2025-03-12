@@ -28,9 +28,11 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->shader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->shader->ID, "dirShadowMap"), 2); //GL_TEXTURE2
+    //Check DrawCall.BindTextureProperties
 
     //Debug lighting shader
     this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
+    this->drawDebugLights = false;
 
     //Final quad shader
     this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
@@ -73,7 +75,7 @@ void Renderer::BeginRenderFrame()
 
 void Renderer::EndRenderFrame()
 {
-    this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
+    if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
 
     glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames
@@ -85,13 +87,18 @@ void Renderer::EndRenderFrame()
         //Send shadowmap id to the drawcall
         d->SetDirShadowMapTexture(this->dirShadowMapTextureDepth);
 
-        //Binds the normalmap, diffusemap, shadowmap textures. (if applicable)
-        d->BindMaterialProperties(this->shader);
+        //Sends and binds the normalmap, diffusemap, shadowmap textures. (if applicable)
+        d->BindTextureProperties(this->shader);
 
         //Draw with shader. (model matrix is sent here)
         d->Render(this->shader);
     }
     this->drawCalls.clear();
+
+    if (this->drawDebugLights)
+    {
+        this->DrawLightsDebug();
+    }
 
     //main FB
     glBindFramebuffer(GL_FRAMEBUFFER, 0); 
@@ -131,6 +138,7 @@ void Renderer::RenderDirShadowMap()
     glm::mat4 lightSpaceMatrix = lightProjectionMatrix * lightViewMatrix; 
 
     glViewport(0, 0, this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT); //make sure viewport is same as the texture size
+    //NOTE: Setting viewport==texturesize makes it basically "fullscreen" no matter the texture resolution.
 
     //drawing into dir shadow framebuffer texture
     glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
@@ -245,6 +253,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
         this->SetPointLightProperties(this->currentFramePointLightCount, pos, col, intensity, true);
         this->SendPointLightUniforms(this->currentFramePointLightCount);
         this->currentFramePointLightCount++;
+        glUniform1i(glGetUniformLocation(this->shader->ID, "numPointLights"), this->currentFramePointLightCount);
     }
     else
     {
@@ -252,9 +261,9 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
     }
 }
 
-void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity)
+void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow)
 {
-    this->SetDirLightProperties(dir, col, intensity, true);
+    this->SetDirLightProperties(dir, col, intensity, true, shadow);
     this->SendDirLightUniforms();
 }
 
@@ -266,6 +275,7 @@ void Renderer::SetAndSendAllLightsToFalse()
         this->SendPointLightUniforms(i);
     }
     this->currentFramePointLightCount = 0;
+    glUniform1i(glGetUniformLocation(this->shader->ID, "numPointLights"), 0);
 
     this->dirLight.isActive = false;
     this->SendDirLightUniforms();
@@ -300,12 +310,13 @@ void Renderer::SendPointLightUniforms(unsigned int index)
     glUniform1f(glGetUniformLocation(this->shader->ID, csi), this->pointLights[index].intensity);
 }
 
-void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active)
+void Renderer::SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active, bool shadow)
 {
     this->dirLight.direction = { dir.x, dir.y, dir.z };
     this->dirLight.color = {col.r, col.g, col.b};
     this->dirLight.intensity = intensity;
     this->dirLight.isActive = active;
+    this->dirLight.castShadows = shadow;
 }
 
 void Renderer::SendDirLightUniforms()
@@ -316,6 +327,7 @@ void Renderer::SendDirLightUniforms()
     glUniform3fv(glGetUniformLocation(this->shader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
     glUniform1f(glGetUniformLocation(this->shader->ID, "dirLight.intensity"), dirLight.intensity);
     glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.isActive"), dirLight.isActive);
+    glUniform1i(glGetUniformLocation(this->shader->ID, "dirLight.castShadows"), dirLight.castShadows);
 }
 
 void Renderer::InitializePointLights()
@@ -397,7 +409,8 @@ void Renderer::SetupDirShadowMapFramebuffer()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); //DONT LET THE TEXTURE MAP REPEAT
     float borderCol[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderCol); // Instead, outside its range should just be 1.0f (furthest away, so no shadow)
-
+    //NOTE: VIEWPORT HAS NO RELATION TO THIS, ITS FOR PROJECTION MATRIX FRUSTUM. (when frag is outside this frustum)
+  
     //Attach texture
     glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->dirShadowMapTextureDepth, 0);

@@ -14,7 +14,7 @@ public:
 	void Render(Shader* shader);
 
 	//For "fs1" lighting shader
-	void BindMaterialProperties(Shader* shader);
+	void BindTextureProperties(Shader* shader);
 	void SetNormalMapTexture(unsigned int id);
 	void SetDiffuseMapTexture(unsigned int id);
 	void SetDirShadowMapTexture(unsigned int id);

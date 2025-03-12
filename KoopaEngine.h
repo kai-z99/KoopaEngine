@@ -43,9 +43,10 @@ public:
 
     void DrawDirLight(Vec3 dir = { 1.0f, -1.0f, 1.0f },
                 Vec3 col = { 1.0f, 1.0f, 1.0f }, 
-                float intesity = 1.0f);
+                float intesity = 1.0f,
+                bool shadows = false);
 
-    void DrawLightsDebug();
+    void SetDrawLightsDebug(bool on);
     
 
 private:

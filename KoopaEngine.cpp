@@ -130,14 +130,14 @@ void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity)
     this->renderer->AddPointLightToFrame(pos, col, intensity);
 }
 
-void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity)
+void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity, bool shadows)
 {
-    this->renderer->AddDirLightToFrame(dir, col, intensity);
+    this->renderer->AddDirLightToFrame(dir, col, intensity, shadows);
 }
 
-void KoopaEngine::DrawLightsDebug()
+void KoopaEngine::SetDrawLightsDebug(bool on)
 {
-    this->renderer->DrawLightsDebug();
+    this->renderer->drawDebugLights = on;
 }
 
 void KoopaEngine::DrawFinalQuad()

@@ -31,9 +31,9 @@ public:
     void SetCurrentNormal(const char* path);
 
 	//Light functions
-    void DrawLightsDebug();
     void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity);
-    void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity);
+    void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow);
+    bool drawDebugLights;
 
 private:
     static const unsigned int MAX_POINT_LIGHTS = 4;
@@ -53,6 +53,7 @@ private:
 
     //LIGHTING
     void SetAndSendAllLightsToFalse();
+    //point
     unsigned int currentFramePointLightCount;
     struct PointLight
     {
@@ -71,24 +72,27 @@ private:
     void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active);
     void SendPointLightUniforms(unsigned int index);
     void InitializePointLights();
-
+    //directional
     struct DirLight
     {
         glm::vec3 direction;
         glm::vec3 color;
         float intensity;
         bool isActive;
+        bool castShadows;
 
         DirLight()
-            : direction(0.5f, -1.0f, 0.5f), color(1.0f), intensity(1.0f), isActive(false) {}
+            : direction(0.5f, -1.0f, 0.5f), color(1.0f), intensity(1.0f), isActive(false), castShadows(false) {}
 
-        DirLight(const glm::vec3& dir, const glm::vec3& col, float intensity, bool active)
-            : direction(dir), color(col), intensity(intensity), isActive(active) {}
+        DirLight(const glm::vec3& dir, const glm::vec3& col, float intensity, bool active, bool shadow)
+            : direction(dir), color(col), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     DirLight dirLight;
-    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active);
+    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active, bool shadow);
     void SendDirLightUniforms();
     void InitializeDirLight();
+    //debug
+    void DrawLightsDebug();
 
     //SHADOWS
     //directional

@@ -35,10 +35,11 @@ void DrawCall::Render(Shader* shader)
     glBindVertexArray(0);
 }
 
-void DrawCall::BindMaterialProperties(Shader* shader)
+void DrawCall::BindTextureProperties(Shader* shader)
 {
     shader->use();
 
+    //TEXTURE0: DIFFUSEMAP------------------------------------------------------------------------
     if (this->usingDiffuseMap)
     {
         glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), 1);
@@ -51,6 +52,7 @@ void DrawCall::BindMaterialProperties(Shader* shader)
         glUniform3fv(glGetUniformLocation(shader->ID, "baseColor"), 1, glm::value_ptr(glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b)));
     }
 
+    //TEXTURE1: NORMALMAP-------------------------------------------------------------------------
     if (this->usingNormalMap)
     {
         glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 1);
@@ -62,6 +64,7 @@ void DrawCall::BindMaterialProperties(Shader* shader)
         glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 0);
     }
 
+    //TEXTURE2: DIRECTIONAL SHADOWMAP--------------------------------------------------------------
     glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
     glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTexture);
 

@@ -52,12 +52,14 @@ namespace ShaderSources
 
     vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
     uniform PointLight pointLights[4];
+    uniform int numPointLights;
     
     struct DirLight {
         vec3 direction;
         vec3 color;
         float intensity;
         bool isActive;    
+        bool castShadows;
     };
 
     vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
@@ -94,7 +96,7 @@ namespace ShaderSources
         //float dirShadow = CalculateShadow(FragPosLightSpace, (usingNormalMap) ? normalFromMap : normalFromData, dirLight.direction);
         
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < numPointLights; i++)
         {
             color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
         }
@@ -114,30 +116,35 @@ namespace ShaderSources
     
     float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
     {
-        vec2 texelSize = 1.0f / textureSize(dirShadowMap, 0);
-        
         //note: we only care about z comp of fragPosLightSpace.
         vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //perspective divide to convert to [-1,1]. 
-        //Now: {[-1,1], [-1,1], [-1,1]}
+        //Now: {[-1,1], [-1,1], [-1,1]} (if in frustum, AKA will show in the shadow snapshot, not clipped out)
 
         projCoords = projCoords * 0.5 + 0.5;  
-        //Now: {[0,1] , [0,1], [0,1]}
+        //Now: {[0,1] , [0,1], [0,1]} (if in frustum, AKA will show in the shadow snapshot, not clipped out)
 
-        float closestDepth = texture(dirShadowMap, projCoords.xy).r;
+        float closestDepth = texture(dirShadowMap, projCoords.xy).r; //note: this can sample outside [0,1] if its outsidde the frag was outside frustum. (clipped out)
+        //if it does, it return 1.0f due to the wrapping method we set.
         float fragDepth = projCoords.z;
 
         if (fragDepth > 1.0f) return 0.0f; //Outside the far plane
 
-        float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.005);
-        float shadow = 0.0;
+        float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.005); //mote bias with more angle.
+        float shadow = 0.0f;
 
+        //PCF---
+        vec2 texelSize = 1.0f / textureSize(dirShadowMap, 0);
         //This is like a convolution matrix.
         for(int x = -1; x <= 1; ++x)
         {
             for(int y = -1; y <= 1; ++y)
             {
-                float pcfDepth = texture(dirShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-                shadow += fragDepth - bias > pcfDepth ? 1.0 : 0.0;        
+                float pcfDepth = texture(dirShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; //closest depth of the surronding pixel
+                shadow += fragDepth - bias > pcfDepth ? 1.0 : 0.0;   //if fragdepth > closest depth of near pixel, add more shadow  
+                //note: think of what happen ShadowCalcultion samples a pixel thats on the edge of a box. This convolution will add some contribution
+                //for the texels that are on the box, but wont add contribution to the ones that are off the edge of the box. making softer shadow. (its an edge as it should be)
+                //Visualization: convert to lightSpace, 9 lasers in a square at the pixel being sampled. Lasers that hit before are add shadow,
+                //lasers that hit behind sample pixel dont contribute to shadow.
             }    
         }
         shadow /= 9.0;
@@ -224,9 +231,15 @@ namespace ShaderSources
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
         
-
-        float shadow = ShadowCalculation(FragPosLightSpace, normal, -direction);
-        return (1.0 - shadow) * (diffuse + specular);
+        if (!light.castShadows)
+        {
+            return (diffuse + specular);
+        }
+        else
+        {
+            float shadow = ShadowCalculation(FragPosLightSpace, normal, -direction);
+            return (1.0 - shadow) * (diffuse + specular);
+        }
     }
     )";
 
