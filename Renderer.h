@@ -29,6 +29,7 @@ public:
     void SetCurrentDiffuse(const char* path);
     void SetCurrentColorDiffuse(Vec3 col);
     void SetCurrentNormal(const char* path);
+    void SetSkybox(const std::vector<const char*>& faces);
 
 	//Light functions
     void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity);
@@ -39,17 +40,23 @@ private:
     static const unsigned int MAX_POINT_LIGHTS = 4;
 
     //Shader objects
-    Shader* shader; 
+    Shader* lightingShader; 
     Shader* debugLightShader;
     Shader* screenShader;
     Shader* dirShadowShader;
+    Shader* skyShader;
 
     //TEXTURES
     unsigned int currentDiffuseTexture;
     unsigned int currentNormalMapTexture;
     unsigned int LoadTexture(const char* path);
+    unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
+    //skybox
+    unsigned int currentSkyboxTexture;
+    bool usingSkybox;
+    void DrawSkybox();
 
     //LIGHTING
     void SetAndSendAllLightsToFalse();
@@ -69,7 +76,6 @@ private:
             : position(pos), color(col), intensity(intensity), isActive(active) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
-    void SetPointLightProperties(unsigned int index, Vec3 pos, Vec3 col, float intensity, bool active);
     void SendPointLightUniforms(unsigned int index);
     void InitializePointLights();
     //directional
@@ -88,7 +94,6 @@ private:
             : direction(dir), color(col), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     DirLight dirLight;
-    void SetDirLightProperties(Vec3 dir, Vec3 col, float intensity, bool active, bool shadow);
     void SendDirLightUniforms();
     void InitializeDirLight();
     //debug
@@ -109,21 +114,15 @@ private:
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
-    void SetupTriangleBuffers();
-    void SetupCubeBuffers();
-    void SetupPlaneBuffers();
-    void SetupScreenQuadBuffers();
-    unsigned int triangleVAO, triangleVBO, planeVBO;
-    unsigned int cubeVAO, cubeVBO, planeVAO;
-    unsigned int screenQuadVBO, screenQuadVAO;
+    unsigned int triangleVAO;
+    unsigned int cubeVAO, planeVAO;
+    unsigned int screenQuadVAO;
+    unsigned int skyboxVAO;
 
     //FRAMEBUFFERS
     void SetupFramebuffers();
-    void SetupFinalImageFramebuffer();
-    unsigned int finalImageFBO, finalImageTextureRGB, finalImageRBO; 
-    void SetupDirShadowMapFramebuffer();
+    unsigned int finalImageFBO, finalImageTextureRGB; 
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
-    void SetupPointShadowMapFramebuffer();
     unsigned int pointShadowMapFBO, pointShadowMapTextureDepth; //cube map
 
 };

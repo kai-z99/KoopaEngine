@@ -23,6 +23,7 @@ public:
     void SetCurrentDiffuseTexture(const char* path);
     void SetCurrentDiffuseTexture(Vec3 col);
     void SetCurrentNormalTexture(const char* path);
+    void SetSkybox(const std::vector<const char*>& faces);
 
     void ClearScreen(Vec4 color);
 

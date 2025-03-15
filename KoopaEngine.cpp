@@ -105,6 +105,11 @@ void KoopaEngine::SetCurrentNormalTexture(const char* path)
     this->renderer->SetCurrentNormal(path);
 }
 
+void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)
+{
+    this->renderer->SetSkybox(faces);
+}
+
 void KoopaEngine::ClearScreen(Vec4 color)
 {
     this->renderer->ClearScreen(color);

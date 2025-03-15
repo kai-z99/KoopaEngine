@@ -65,9 +65,7 @@ void DrawCall::BindTextureProperties(Shader* shader)
     }
 
     //TEXTURE2: DIRECTIONAL SHADOWMAP--------------------------------------------------------------
-    glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
-    glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTexture);
-
+    //Done in renderer.
 }
 
 void DrawCall::SetNormalMapTexture(unsigned int id)
@@ -80,11 +78,6 @@ void DrawCall::SetDiffuseMapTexture(unsigned int id)
 {
     this->diffuseMapTexture = id;
     this->usingDiffuseMap = true;
-}
-
-void DrawCall::SetDirShadowMapTexture(unsigned int id)
-{
-    this->dirShadowMapTexture = id;
 }
 
 void DrawCall::SetDiffuseColor(Vec3 col)

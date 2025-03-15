@@ -48,6 +48,9 @@
     <ClInclude Include="DrawCall.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="BufferSetup.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SimpleEngine.cpp">
@@ -69,6 +72,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DrawCall.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BufferSetup.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

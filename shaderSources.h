@@ -310,6 +310,36 @@ namespace ShaderSources
     }
     )";
 
+    const char* vsSkybox = R"(
+    #version 330 core
+    
+    layout (location = 0) in vec3 aPos;
+    
+    uniform mat4 view;
+    uniform mat4 projection;
+    
+    out vec3 TexCoords;
+    
+    void main()
+    {
+        //model is mat4(1.0) skybox size doesnt change;
+        //make z = w so z is always last in depth buffer. (w/w = 1.0 after perspective divide)
+        gl_Position = (projection * view * vec4(aPos, 1.0)).xyww;
+        TexCoords = aPos; //cubemap direction
+    }  
+    )";
 
+    const char* fsSkybox = R"(
+    #version 330 core
+    out vec4 FragColor;
 
+    in vec3 TexCoords;
+
+    uniform samplerCube skyboxTexture;
+
+    void main()
+    {
+	    FragColor = texture(skyboxTexture, TexCoords);
+    }
+    )";
 }

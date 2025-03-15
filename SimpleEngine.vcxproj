@@ -143,6 +143,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BufferSetup.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Constants.h" />
     <ClInclude Include="DrawCall.h" />
@@ -156,6 +157,7 @@
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BufferSetup.cpp" />
     <ClCompile Include="DrawCall.cpp" />
     <ClCompile Include="glad\glad.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

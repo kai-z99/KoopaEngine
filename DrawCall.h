@@ -17,7 +17,6 @@ public:
 	void BindTextureProperties(Shader* shader);
 	void SetNormalMapTexture(unsigned int id);
 	void SetDiffuseMapTexture(unsigned int id);
-	void SetDirShadowMapTexture(unsigned int id);
 	void SetDiffuseColor(Vec3 col);
 
 	//General flags
