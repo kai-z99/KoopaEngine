@@ -44,6 +44,7 @@ private:
     Shader* debugLightShader;
     Shader* screenShader;
     Shader* dirShadowShader;
+    Shader* pointShadowShader;
     Shader* skyShader;
 
     //TEXTURES
@@ -106,7 +107,7 @@ private:
 
     //point
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
-    void RenderPointShadowMap();
+    void RenderPointShadowMap(unsigned int index);
     std::vector<glm::mat4> shadowTransforms;
     
     //DRAWING

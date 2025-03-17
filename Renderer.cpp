@@ -29,6 +29,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2); //GL_TEXTURE2
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMap"), 3); //GL_TEXTURE3
     //Check DrawCall.BindTextureProperties
 
     //Debug lighting shader
@@ -42,6 +43,9 @@ Renderer::Renderer()
 
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
+
+    //point shadow shader
+    this->pointShadowShader = new Shader(ShaderSources::vsPointShadow, ShaderSources::fsPointShadow);
 
     //skybox shader
     this->skyShader = new Shader(ShaderSources::vsSkybox, ShaderSources::fsSkybox);
@@ -83,6 +87,8 @@ void Renderer::EndRenderFrame()
 {
     if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
 
+    this->RenderPointShadowMap(0);
+
     //Bind final image framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames
@@ -92,6 +98,8 @@ void Renderer::EndRenderFrame()
     //Bind the directional shadowMap
     glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
     glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth); //global binding, not related to shader so cant do it in contructor.
+    glActiveTexture(GL_TEXTURE3); //pointshadowmap is 3
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointShadowMapTextureDepth);
 
     //Drawing into finalImageFBO....
     for (DrawCall* d : this->drawCalls)
@@ -185,12 +193,59 @@ void Renderer::RenderDirShadowMap()
         //things will still be culled.
         d->SetCulling(false);
         d->Render(this->dirShadowShader);
+        d->SetCulling(true);
     }
 }
 
-void Renderer::RenderPointShadowMap()
+void Renderer::RenderPointShadowMap(unsigned int index)
 {
-    //this->shadowTransforms.clear();
+    this->pointShadowShader->use();
+
+    //create shadow proj matrix base
+    float aspect = (float)P_SHADOW_WIDTH / (float)P_SHADOW_HEIGHT;
+    float near = 0.1f;
+    float far = 25.0f;
+    glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near, far);
+
+    //Set shadow transforms
+    this->shadowTransforms.clear();
+    glm::vec3 lightPos = this->pointLights[index].position;   //view
+
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
+
+    //bind framebuffer and viewport
+    glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO); //write to the shadowMap
+    glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT); //make sure the window rectangle is the shadowmap size
+    
+    //send some uniforms
+    this->lightingShader->use();
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "farPlane"), far);
+    this->pointShadowShader->use();
+    glUniform1f(glGetUniformLocation(this->pointShadowShader->ID, "farPlane"), far);
+    glUniform3fv(glGetUniformLocation(this->pointShadowShader->ID, "lightPos"), 1, glm::value_ptr(lightPos));
+
+    //Render each face of the cubemap
+    for (int i = 0; i < 6; i++)
+    {
+        GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, face, this->pointShadowMapTextureDepth, 0);
+        glUniformMatrix4fv(glGetUniformLocation(this->pointShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowTransforms[i]));
+        glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
+
+        for (DrawCall* d : this->drawCalls)
+        {
+            d->SetCulling(false);
+            d->Render(this->pointShadowShader);
+            d->SetCulling(true);
+        }
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::ClearScreen(Vec4 col)

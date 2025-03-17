@@ -50,7 +50,7 @@ namespace ShaderSources
         bool isActive;
     };  
 
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
     uniform PointLight pointLights[4];
     uniform int numPointLights;
     
@@ -62,10 +62,11 @@ namespace ShaderSources
         bool castShadows;
     };
 
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
     uniform DirLight dirLight;
     
     float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
+    float PointShadowCalculation(vec3 fragPos, vec3 lightPos);
 
     in vec2 TexCoords;
     in vec3 Normal;
@@ -76,6 +77,8 @@ namespace ShaderSources
     uniform sampler2D currentDiffuse;   //0
     uniform sampler2D currentNormalMap; //1
     uniform sampler2D dirShadowMap;     //2
+    uniform samplerCube pointShadowMap;   //3
+    uniform float farPlane; //for point shadow calculation
     uniform vec3 baseColor; //Use this if not using a diffuse texture
     uniform vec3 viewPos;
 
@@ -87,6 +90,8 @@ namespace ShaderSources
         
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
+        float gamma = 2.2;
+        vec3 diffuseColor = (usingDiffuseMap) ? pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)) : baseColor;
     
         vec3 normalFromData = normalize(Normal);
         vec3 normalFromMap  = texture(currentNormalMap, TexCoords).rgb;
@@ -98,15 +103,13 @@ namespace ShaderSources
 
         for (int i = 0; i < numPointLights; i++)
         {
-            color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
+            color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir, diffuseColor);
         }
 
-        color += CalcDirLight(dirLight, (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
+        color += CalcDirLight(dirLight, (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir, diffuseColor);
     
-        float gamma = 2.2;
-
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 sceneAmbient = vec3(0.115f, 0.115f, 0.115f) * diffuseColor; 
         color += sceneAmbient;
 
         color = pow(color, vec3(1.0f / gamma)); //Gamma correction
@@ -154,7 +157,23 @@ namespace ShaderSources
         return shadow;  
     }
 
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+    float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal)
+    {
+        vec3 lightToFrag = fragPos - lightPos;
+
+        float fragDepth = length(lightToFrag); // [0, farPlane]
+        float closestDepth = texture(pointShadowMap, lightToFrag).r;// [0,1]
+        closestDepth *= farPlane; //[0,1] -> [0, farPlane]
+        
+        float shadow = 0.0f;
+        float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
+        
+        if (fragDepth - bias > closestDepth) shadow += 1.0f;
+
+        return shadow;
+    }
+
+    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
     {
         if (light.isActive == false)
         {
@@ -176,29 +195,19 @@ namespace ShaderSources
         float attenuation = 1.0 / (distance * distance); //quadratic attenuation
 
         // combine results
-
-        vec3 diffuseColor;
-        
-        if (usingDiffuseMap)
-        {
-            float gamma = 2.2;
-            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
-        }
-        else
-        {
-            diffuseColor = baseColor;
-        }
         
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
 
         diffuse  *= attenuation;
         specular *= attenuation;
+        
+        float shadow = PointShadowCalculation(fragPos, light.position, normal);
 
-        return (diffuse + specular);
+        return (1.0f - shadow) * (diffuse + specular);
     } 
 
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
     {
         if (light.isActive == false)
         {
@@ -216,17 +225,6 @@ namespace ShaderSources
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
 
         // combine results
-        vec3 diffuseColor;
-        
-        if (usingDiffuseMap)
-        {
-            float gamma = 2.2;
-            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
-        }
-        else
-        {
-            diffuseColor = baseColor;
-        }
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
@@ -291,7 +289,7 @@ namespace ShaderSources
 
     layout (location = 0) in vec3 aPos;
 
-    uniform mat4 lightSpaceMatrix;
+    uniform mat4 lightSpaceMatrix; //view and projection combined
     uniform mat4 model;
 
     //This vertex shader simply converts a fragment to light space. Nothing else
@@ -307,6 +305,43 @@ namespace ShaderSources
     void main()
     {
 	    gl_FragDepth = gl_FragCoord.z; //set depth buffer manually if we want (this is done auto though so who cares...)
+    }
+    )";
+
+    const char* vsPointShadow = R"(
+    #version 330 core
+
+    layout (location = 0) in vec3 aPos;
+
+    uniform mat4 lightSpaceMatrix; //view and projection combined
+    uniform mat4 model;
+
+    out vec3 FragPos;
+
+    void main()
+    {
+        gl_Position = lightSpaceMatrix * model * vec4(aPos, 1.0);
+        FragPos = vec3(model * vec4(aPos, 1.0));
+    }  
+    )";
+
+    const char* fsPointShadow = R"(
+    #version 330 core
+
+    in vec3 FragPos;
+
+    uniform vec3 lightPos;
+    uniform float farPlane;
+
+    void main()
+    {
+        float lightDistance = length(FragPos.xyz - lightPos);
+    
+        // map to [0,1] range by dividing by far_plane
+        lightDistance = lightDistance / farPlane;
+    
+        // write this as modified depth
+        gl_FragDepth = lightDistance;
     }
     )";
 

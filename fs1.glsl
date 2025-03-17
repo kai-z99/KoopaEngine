@@ -1,3 +1,4 @@
+
     #version 330 core
     out vec4 FragColor;
 
@@ -8,20 +9,23 @@
         bool isActive;
     };  
 
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
     uniform PointLight pointLights[4];
+    uniform int numPointLights;
     
     struct DirLight {
         vec3 direction;
         vec3 color;
         float intensity;
         bool isActive;    
+        bool castShadows;
     };
 
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
     uniform DirLight dirLight;
     
     float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
+    float PointShadowCalculation(vec3 fragPos, vec3 lightPos);
 
     in vec2 TexCoords;
     in vec3 Normal;
@@ -32,6 +36,8 @@
     uniform sampler2D currentDiffuse;   //0
     uniform sampler2D currentNormalMap; //1
     uniform sampler2D dirShadowMap;     //2
+    uniform samplerCube pointShadowMap;   //3
+    uniform float farPlane; //for point shadow calculation
     uniform vec3 baseColor; //Use this if not using a diffuse texture
     uniform vec3 viewPos;
 
@@ -43,6 +49,8 @@
         
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
+        float gamma = 2.2;
+        vec3 diffuseColor = (usingDiffuseMap) ? pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)) : baseColor;
     
         vec3 normalFromData = normalize(Normal);
         vec3 normalFromMap  = texture(currentNormalMap, TexCoords).rgb;
@@ -52,17 +60,15 @@
         //float dirShadow = CalculateShadow(FragPosLightSpace, (usingNormalMap) ? normalFromMap : normalFromData, dirLight.direction);
         
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < numPointLights; i++)
         {
             color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
         }
 
         color += CalcDirLight(dirLight, (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir);
     
-        float gamma = 2.2;
-
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
+        vec3 sceneAmbient = vec3(0.115f, 0.115f, 0.115f) * diffuseColor; 
         color += sceneAmbient;
 
         color = pow(color, vec3(1.0f / gamma)); //Gamma correction
@@ -110,7 +116,23 @@
         return shadow;  
     }
 
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+    float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal)
+    {
+        vec3 lightToFrag = fragPos - lightPos;
+
+        float fragDepth = length(lightToFrag); // [0, farPlane]
+        float closestDepth = texture(pointShadowMap, lightToFrag).r;// [0,1]
+        closestDepth *= farPlane; //[0,1] -> [0, farPlane]
+        
+        float shadow = 0.0f;
+        float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
+        
+        if (fragDepth - bias > closestDepth) shadow += 1.0f;
+
+        return shadow;
+    }
+
+    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
     {
         if (light.isActive == false)
         {
@@ -132,29 +154,19 @@
         float attenuation = 1.0 / (distance * distance); //quadratic attenuation
 
         // combine results
-
-        vec3 diffuseColor;
-        
-        if (usingDiffuseMap)
-        {
-            float gamma = 2.2;
-            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
-        }
-        else
-        {
-            diffuseColor = baseColor;
-        }
         
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
 
         diffuse  *= attenuation;
         specular *= attenuation;
+        
+        float shadow = PointShadowCalculation(fragPos, light.position, normal);
 
-        return (diffuse + specular);
+        return (1.0f - shadow) * (diffuse + specular);
     } 
 
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
     {
         if (light.isActive == false)
         {
@@ -172,22 +184,17 @@
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
 
         // combine results
-        vec3 diffuseColor;
-        
-        if (usingDiffuseMap)
-        {
-            float gamma = 2.2;
-            diffuseColor = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)); //degamma
-        }
-        else
-        {
-            diffuseColor = baseColor;
-        }
     
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
         
-
-        float shadow = ShadowCalculation(FragPosLightSpace, normal, -direction);
-        return (1.0 - shadow) * (diffuse + specular);
+        if (!light.castShadows)
+        {
+            return (diffuse + specular);
+        }
+        else
+        {
+            float shadow = ShadowCalculation(FragPosLightSpace, normal, -direction);
+            return (1.0 - shadow) * (diffuse + specular);
+        }
     }

@@ -40,10 +40,10 @@ void DrawCall::BindTextureProperties(Shader* shader)
     shader->use();
 
     //TEXTURE0: DIFFUSEMAP------------------------------------------------------------------------
+    glActiveTexture(GL_TEXTURE0);
     if (this->usingDiffuseMap)
     {
         glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), 1);
-        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, this->diffuseMapTexture); //in fs: currentDiffuseMap = 0
     }
     else
@@ -53,10 +53,10 @@ void DrawCall::BindTextureProperties(Shader* shader)
     }
 
     //TEXTURE1: NORMALMAP-------------------------------------------------------------------------
+    glActiveTexture(GL_TEXTURE1);
     if (this->usingNormalMap)
     {
         glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 1);
-        glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, this->normalMapTexture); //in fs: currentNormalMap = 1
     }
     else
@@ -65,6 +65,9 @@ void DrawCall::BindTextureProperties(Shader* shader)
     }
 
     //TEXTURE2: DIRECTIONAL SHADOWMAP--------------------------------------------------------------
+    //Done in renderer.
+
+    //TEXTURE3: POINT SHADOWMAP
     //Done in renderer.
 }
 
