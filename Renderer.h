@@ -32,7 +32,7 @@ public:
     void SetSkybox(const std::vector<const char*>& faces);
 
 	//Light functions
-    void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity);
+    void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity, bool shadow);
     void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow);
     bool drawDebugLights;
 
@@ -69,12 +69,15 @@ private:
         glm::vec3 color;
         float intensity;
         bool isActive;
+        bool castShadows;
+
+        unsigned int shadowMapTexture;
 
         PointLight()
-            : position(0.0f), color(1.0f), intensity(1.0f), isActive(false) {}
+            : position(0.0f), color(1.0f), intensity(1.0f), isActive(false), castShadows(false) {}
 
-        PointLight(const glm::vec3& pos, const glm::vec3& col, float intensity, bool active)
-            : position(pos), color(col), intensity(intensity), isActive(active) {}
+        PointLight(const glm::vec3& pos, const glm::vec3& col, float intensity, bool active, bool shadow)
+            : position(pos), color(col), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
     void SendPointLightUniforms(unsigned int index);
@@ -124,6 +127,6 @@ private:
     void SetupFramebuffers();
     unsigned int finalImageFBO, finalImageTextureRGB; 
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
-    unsigned int pointShadowMapFBO, pointShadowMapTextureDepth; //cube map
+    unsigned int pointShadowMapFBO; //cube map texture is in point light struct
 
 };

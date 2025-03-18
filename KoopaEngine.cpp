@@ -130,9 +130,9 @@ void KoopaEngine::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
     this->renderer->DrawPlane(pos, size, rotation);
 }
 
-void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity)
+void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity, bool shadows)
 {
-    this->renderer->AddPointLightToFrame(pos, col, intensity);
+    this->renderer->AddPointLightToFrame(pos, col, intensity, shadows);
 }
 
 void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity, bool shadows)

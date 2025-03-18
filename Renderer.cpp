@@ -19,17 +19,27 @@ Renderer::Renderer()
 
     //Static setup
 	this->SetupVertexBuffers();
-    this->SetupFramebuffers();
+    
 
     //Main lighting shader
     this->lightingShader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->lightingShader->use();
     this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
     this->currentNormalMapTexture = this->LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0); //GL_TEXTURE0
+    //Associate
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2); //GL_TEXTURE2
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMap"), 3); //GL_TEXTURE3
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
+
+    //glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMap"), 3);   //GL_TEXTURE3
+    // Bind each point shadow cubemap to a consecutive texture unit starting from GL_TEXTURE3
+    for (unsigned int i = 0; i < this->MAX_POINT_LIGHTS; i++) 
+    {
+        std::string uniformName = "pointShadowMaps[" + std::to_string(i) + "]";
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, uniformName.c_str()), 3 + i);
+    }
+    //GL_TEXTURE[3-6] have been used.
+     
     //Check DrawCall.BindTextureProperties
 
     //Debug lighting shader
@@ -59,6 +69,10 @@ Renderer::Renderer()
     //Draw call vector
     this->drawCalls = {};
 
+    //framebuffers/textures
+    //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
+    this->SetupFramebuffers();
+
     this->usingSkybox = false;
 }
 
@@ -87,7 +101,18 @@ void Renderer::EndRenderFrame()
 {
     if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
 
-    this->RenderPointShadowMap(0);
+    //render each point light shadow map
+    for (int i = 0; i < currentFramePointLightCount; i++)
+    {
+        std::cout << "Light " << i << " shadowMapTexture ID = "
+            << pointLights[i].shadowMapTexture << std::endl;
+        if (this->pointLights[i].castShadows)
+        {
+            
+            this->RenderPointShadowMap(i);
+
+        }
+    }
 
     //Bind final image framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
@@ -98,8 +123,12 @@ void Renderer::EndRenderFrame()
     //Bind the directional shadowMap
     glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
     glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth); //global binding, not related to shader so cant do it in contructor.
-    glActiveTexture(GL_TEXTURE3); //pointshadowmap is 3
-    glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointShadowMapTextureDepth);
+    //Bind point shadowmaps
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+    {
+        glActiveTexture(GL_TEXTURE3 + i); //pointshadowmap is 3-6
+        glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointLights[i].shadowMapTexture);
+    }
 
     //Drawing into finalImageFBO....
     for (DrawCall* d : this->drawCalls)
@@ -220,6 +249,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
     //bind framebuffer and viewport
     glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO); //write to the shadowMap
+    glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
     glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT); //make sure the window rectangle is the shadowmap size
     
     //send some uniforms
@@ -233,8 +263,14 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     for (int i = 0; i < 6; i++)
     {
         GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, face, this->pointShadowMapTextureDepth, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, face, this->pointLights[index].shadowMapTexture, 0);
         glUniformMatrix4fv(glGetUniformLocation(this->pointShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowTransforms[i]));
+
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            std::cout << "Framebuffer not complete: " << status << std::endl;
+        }
+
         glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
 
         for (DrawCall* d : this->drawCalls)
@@ -245,6 +281,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         }
     }
 
+    
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -336,7 +373,7 @@ void Renderer::DrawLightsDebug()
     }
 }
 
-void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
+void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity, bool shadow)
 {
     unsigned int i = this->currentFramePointLightCount;
 
@@ -347,6 +384,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity)
         this->pointLights[i].position = { pos.x, pos.y, pos.z };
         this->pointLights[i].color = { col.r, col.g, col.b };
         this->pointLights[i].intensity = intensity;
+        this->pointLights[i].castShadows = shadow;
         
         this->SendPointLightUniforms(this->currentFramePointLightCount);
         this->currentFramePointLightCount++;
@@ -404,6 +442,10 @@ void Renderer::SendPointLightUniforms(unsigned int index)
     s = "pointLights[" + std::to_string(index) + "].intensity";
     const char* csi = s.c_str();
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, csi), this->pointLights[index].intensity);
+
+    s = "pointLights[" + std::to_string(index) + "].castShadows";
+    const char* css = s.c_str();
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, css), this->pointLights[index].castShadows);
 }
 
 void Renderer::SendDirLightUniforms()
@@ -463,8 +505,15 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
 
-    FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO, this->pointShadowMapTextureDepth, 
-        this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
+    //Point shadows: one FBO, many textures
+    FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+    {
+        FramebufferSetup::SetupPointShadowMapTexture(pointLights[i].shadowMapTexture, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
+
+        std::cout << "Light " << i << " shadowMapTexture ID = "
+            << pointLights[i].shadowMapTexture << std::endl;
+    }
 }
 
 unsigned int Renderer::LoadTexture(char const* path)

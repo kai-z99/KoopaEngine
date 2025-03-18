@@ -317,11 +317,25 @@ void FramebufferSetup::SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void FramebufferSetup::SetupPointShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h)
+void FramebufferSetup::SetupPointShadowMapFramebuffer(unsigned int& FBO)
 {
     //create framebuffer
     glGenFramebuffers(1, &FBO);
 
+    //Set buffers
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    glDrawBuffer(GL_NONE); //No need for color buffer, just depth
+    glReadBuffer(GL_NONE); //No need for color buffer
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    //Note: texture is not attched to FB yet. They will be attached when the faces are actaully rendered.
+    //the reason why its not like this for the dir shadow is because its not cube so theres only one possible thing
+    //to render to when doing the shadow pass. For this we need to know which face to render to.
+}
+
+void FramebufferSetup::SetupPointShadowMapTexture(unsigned int& texture, unsigned int w, unsigned int h)
+{
     //createa and bind the cube map
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
@@ -338,14 +352,4 @@ void FramebufferSetup::SetupPointShadowMapFramebuffer(unsigned int& FBO, unsigne
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE); //DONT LET THE TEXTURE MAP REPEAT
-
-    //Set buffers
-    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-    glDrawBuffer(GL_NONE); //No need for color buffer, just depth
-    glReadBuffer(GL_NONE); //No need for color buffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    //Note: texture is not attched to FB yet. They will be attached when the faces are actaully rendered.
-    //the reason why its not like this for the dir shadow is because its not cube so theres only one possible thing
-    //to render to when doing the shadow pass. For this we need to know which face to render to.
 }

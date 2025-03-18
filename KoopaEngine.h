@@ -40,7 +40,8 @@ public:
 
     void DrawPointLight(Vec3 pos = {0,0,0},
                     Vec3 col = {1,1,1},
-                    float intensity = 1.0f);
+                    float intensity = 1.0f,
+                    bool shadows = false);
 
     void DrawDirLight(Vec3 dir = { 1.0f, -1.0f, 1.0f },
                 Vec3 col = { 1.0f, 1.0f, 1.0f }, 
