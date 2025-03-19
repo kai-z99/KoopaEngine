@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 namespace VertexBufferSetup
 {
     unsigned int SetupTriangleBuffers();
@@ -15,6 +17,11 @@ namespace FramebufferSetup
     void SetupFinalImageFramebuffer(unsigned int& FBO, unsigned int& texture);
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h);
     void SetupPointShadowMapFramebuffer(unsigned int& FBO);
-    void SetupPointShadowMapTexture(unsigned int& texture, unsigned int w, unsigned int h);
+}
 
+namespace TextureSetup
+{
+    void SetupPointShadowMapTexture(unsigned int& texture, unsigned int w, unsigned int h);
+    unsigned int LoadTexture(char const* path);
+    unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
 }

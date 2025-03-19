@@ -8,7 +8,7 @@
 #include "shaderSources.h"
 #include "Shader.h"
 #include "DrawCall.h"
-#include "BufferSetup.h"
+#include "Setup.h"
 
 #include <iostream>
 
@@ -20,12 +20,11 @@ Renderer::Renderer()
     //Static setup
 	this->SetupVertexBuffers();
     
-
     //Main lighting shader
     this->lightingShader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->lightingShader->use();
-    this->currentDiffuseTexture = this->LoadTexture("../ShareLib/Resources/wood.png");
-    this->currentNormalMapTexture = this->LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
+    this->currentDiffuseTexture = TextureSetup::LoadTexture("../ShareLib/Resources/wood.png");
+    this->currentNormalMapTexture = TextureSetup::LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
     //Associate
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
@@ -99,63 +98,66 @@ void Renderer::BeginRenderFrame()
 
 void Renderer::EndRenderFrame()
 {
+    //RENDER SHADOW MAPS---
+    //dir
     if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
-
-    //render each point light shadow map
+    //point
     for (int i = 0; i < currentFramePointLightCount; i++)
     {
-        std::cout << "Light " << i << " shadowMapTexture ID = "
-            << pointLights[i].shadowMapTexture << std::endl;
         if (this->pointLights[i].castShadows)
         {
-            
             this->RenderPointShadowMap(i);
-
         }
     }
-
-    //Bind final image framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames
-    glViewport(0, 0, 800, 600); //temp hardcode
         
-    //TODO: Maybe change this to BindStatics()?
-    //Bind the directional shadowMap
+    //BIND SHADOWMAP TEXTURES---
+    //dir
     glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
     glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth); //global binding, not related to shader so cant do it in contructor.
-    //Bind point shadowmaps
+    //point
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
         glActiveTexture(GL_TEXTURE3 + i); //pointshadowmap is 3-6
         glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointLights[i].shadowMapTexture);
     }
 
-    //Drawing into finalImageFBO....
+    //DRAW INTO FINAL IMAGE---
+    //bind FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames on the currently attached textures
+    glViewport(0, 0, 800, 600); //temp hardcode
+    //render
     for (DrawCall* d : this->drawCalls)
     {
-        //Sends and binds the normalmap, diffusemap, shadowmap textures. (if applicable)
+        //Sends and binds the normalmap, diffusemap textures. (if applicable)
         d->BindTextureProperties(this->lightingShader);
 
         //Draw with shader. (model matrix is sent here)
         d->Render(this->lightingShader);
     }
-    this->drawCalls.clear();
-
-    if (this->drawDebugLights)
-    {
-        this->DrawLightsDebug();
-    }
-
+    this->drawCalls.clear(); //raylib style
+    //draw debug light into FBO is applicable
+    if (this->drawDebugLights) this->DrawLightsDebug();
     //Draw skybox last (using z = w optimization)
     if (this->usingSkybox) this->DrawSkybox();
 
-    //main FB
+    //DRAW QUAD ONTO SCREEN---
+    //go to main FBO
     glBindFramebuffer(GL_FRAMEBUFFER, 0); 
-    glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     glClear(GL_COLOR_BUFFER_BIT);
-
     //Draw the final scene on a full screen quad.
+    this->DrawFinalQuad();
+
+    //CLEANUP---
+    //reset lights for the next frame
+    this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
+} 
+
+void Renderer::DrawFinalQuad()
+{
+    glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     this->screenShader->use();
+
     glBindVertexArray(this->screenQuadVAO); //whole screen
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->finalImageTextureRGB); // main scene framebuffer texture to GL_TEXTURE0
@@ -163,9 +165,7 @@ void Renderer::EndRenderFrame()
     glBindVertexArray(0);
 
     glEnable(GL_DEPTH_TEST);
-
-    this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
-} 
+}
 
 void Renderer::DrawSkybox()
 {
@@ -240,11 +240,11 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     this->shadowTransforms.clear();
     glm::vec3 lightPos = this->pointLights[index].position;   //view
 
-    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0, 0.0, 0.0),  glm::vec3(0.0, -1.0, 0.0)));
     this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
-    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
-    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
-    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 1.0, 0.0),  glm::vec3(0.0,  0.0, 1.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0,  0.0,-1.0)));
+    this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, 1.0),  glm::vec3(0.0, -1.0, 0.0)));
     this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
 
     //bind framebuffer and viewport
@@ -263,16 +263,13 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     for (int i = 0; i < 6; i++)
     {
         GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
+        //set output texture (the thing being poured into) (render target)
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, face, this->pointLights[index].shadowMapTexture, 0);
         glUniformMatrix4fv(glGetUniformLocation(this->pointShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowTransforms[i]));
 
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            std::cout << "Framebuffer not complete: " << status << std::endl;
-        }
-
-        glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
-
+        //clear the currently bound attachment's depth buffer
+        glClear(GL_DEPTH_BUFFER_BIT); 
+        //render
         for (DrawCall* d : this->drawCalls)
         {
             d->SetCulling(false);
@@ -281,7 +278,6 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         }
     }
 
-    
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -298,7 +294,7 @@ void Renderer::AddToTextureMap(const char* path)
 
     if (it == this->textureToID.end())
     {
-        unsigned int textureID = this->LoadTexture(path);
+        unsigned int textureID = TextureSetup::LoadTexture(path);
         this->textureToID[path] = textureID;
     }
 }
@@ -322,7 +318,7 @@ void Renderer::SetCurrentNormal(const char* path)
 
 void Renderer::SetSkybox(const std::vector<const char*>& faces)
 {
-    this->currentSkyboxTexture = LoadTextureCubeMap(faces);
+    this->currentSkyboxTexture = TextureSetup::LoadTextureCubeMap(faces);
     this->usingSkybox = true;
 }
 
@@ -509,98 +505,8 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
-        FramebufferSetup::SetupPointShadowMapTexture(pointLights[i].shadowMapTexture, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
-
-        std::cout << "Light " << i << " shadowMapTexture ID = "
-            << pointLights[i].shadowMapTexture << std::endl;
+        TextureSetup::SetupPointShadowMapTexture(pointLights[i].shadowMapTexture, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
     }
-}
-
-unsigned int Renderer::LoadTexture(char const* path)
-{
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-
-    int width, height, nrComponents;
-    unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
-    if (data)
-    {
-        GLenum format;
-        GLenum internalFormat;
-        if (nrComponents == 1)
-        {
-            format = GL_RED;
-            internalFormat = GL_RED;
-        }
-        else if (nrComponents == 3)
-        {
-            internalFormat = GL_RGB;
-            format = GL_RGB;
-        }
-
-        else if (nrComponents == 4)
-        {
-            internalFormat = GL_RGBA;
-            format = GL_RGBA;
-        }
-
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        if (format == GL_RGBA)
-        {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        else
-        {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        }
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
-        stbi_image_free(data);
-    }
-
-    return textureID;
-}
-
-unsigned int Renderer::LoadTextureCubeMap(const std::vector<const char*>& faces)
-{
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-    int width, height, nrComponents;
-    for (unsigned int i = 0; i < faces.size(); i++)
-    {
-        unsigned char* data = stbi_load(faces[i], &width, &height, &nrComponents, 0);
-        if (data)
-        {
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-            stbi_image_free(data);
-        }
-        else
-        {
-            std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
-            stbi_image_free(data);
-        }
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    return textureID;
 }
 
 void Renderer::SetupVertexBuffers()

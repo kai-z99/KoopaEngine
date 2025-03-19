@@ -361,7 +361,7 @@
     
         void main()
         {
-            //model is mat4(1.0) skybox size doesnt change;
+            //model is mat4(1.0) skybox size/pos doesnt change;
             //make z = w so z is always last in depth buffer. (w/w = 1.0 after perspective divide)
             gl_Position = (projection * view * vec4(aPos, 1.0)).xyww;
             TexCoords = aPos; //cubemap direction

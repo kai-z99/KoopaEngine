@@ -50,8 +50,6 @@ private:
     //TEXTURES
     unsigned int currentDiffuseTexture;
     unsigned int currentNormalMapTexture;
-    unsigned int LoadTexture(const char* path);
-    unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
     //skybox
@@ -115,6 +113,7 @@ private:
     
     //DRAWING
     std::vector<DrawCall*> drawCalls;
+    void DrawFinalQuad();
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();

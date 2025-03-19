@@ -48,7 +48,7 @@
     <ClInclude Include="DrawCall.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BufferSetup.h">
+    <ClInclude Include="Setup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -74,7 +74,7 @@
     <ClCompile Include="DrawCall.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BufferSetup.cpp">
+    <ClCompile Include="Setup.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
