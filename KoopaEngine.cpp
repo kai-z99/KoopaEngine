@@ -20,7 +20,7 @@ KoopaEngine::KoopaEngine() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    this->window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "KoopaEngine Window", NULL, NULL);
+    this->window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "KoopaEngine Window", NULL, NULL);
     if (!window) {
         std::cerr << "Window initialization failed.\n";
         glfwTerminate();
@@ -70,7 +70,7 @@ void KoopaEngine::BeginFrame()
     lastFrame = this->currentFrame;
 
     glm::mat4 view = this->camera->GetViewMatrix();
-    glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
     this->renderer->SetCameraMatrices(view, projection, this->camera->position);
 
     this->renderer->BeginRenderFrame(); //sets to screen FB
@@ -143,6 +143,11 @@ void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity, bool shadows
 void KoopaEngine::SetDrawLightsDebug(bool on)
 {
     this->renderer->drawDebugLights = on;
+}
+
+void KoopaEngine::SetCameraExposure(float exposure)
+{
+    this->renderer->SetExposure(exposure);
 }
 
 void KoopaEngine::DrawFinalQuad()

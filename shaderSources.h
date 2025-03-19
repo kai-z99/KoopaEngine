@@ -92,6 +92,7 @@
             vec3 color = vec3(0.0f);
             vec3 viewDir = normalize(viewPos - FragPos);
             float gamma = 2.2;
+            //make sure to convert diffuse to linear space
             vec3 diffuseColor = (usingDiffuseMap) ? pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)) : baseColor;
     
             vec3 normalFromData = normalize(Normal);
@@ -109,8 +110,6 @@
             //Ambient lighting
             vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuseColor; 
             color += sceneAmbient;
-
-            color = pow(color, vec3(1.0f / gamma)); //Gamma correction
 
             FragColor = vec4(color, 1.0f);
         }
@@ -277,14 +276,55 @@
         out vec4 FragColor;
   
         in vec2 TexCoords;
-
-        uniform sampler2D screenTexture;
     
+        uniform sampler2D hdrBuffer;
+        uniform float exposure;
 
+        vec3 reinhardMap(vec3 hdrCol)
+        {
+            return hdrCol / (hdrCol + vec3(1.0f));
+        }
+
+        vec3 exposureMap(vec3 hdrCol, float exposure)
+        {
+            return vec3(1.0) - exp(-hdrCol * exposure);
+        }
+        
+        vec3 cinematicMap(vec3 hdrCol, float exposure)
+        {
+            vec3 x = hdrCol * exposure;
+    
+            // Filmic curve parameters (Uncharted 2 style)
+            const float A = 0.15;
+            const float B = 0.50;
+            const float C = 0.10;
+            const float D = 0.20;
+            const float E = 0.02;
+            const float F = 0.30;
+    
+            vec3 toneMapped = ((x*(A*x + C*B) + D*E) / (x*(A*x + B) + D*F)) - E/F;
+    
+            // Normalize the tone-mapped result by a white point
+            float white = 11.2;
+            float whiteScale = ((white*(A*white + C*B) + D*E) / (white*(A*white + B) + D*F)) - E/F;
+            toneMapped /= whiteScale;
+    
+            return toneMapped;
+        }
+            
+        
         void main()
         {
-            vec4 col = texture(screenTexture, TexCoords);  
-            FragColor = col;
+            const float gamma = 2.2;
+            
+            vec3 hdrCol = texture(hdrBuffer, TexCoords).rgb;  
+            
+            //vec3 mapped = reinhardMap(hdrCol);
+            //vec3 mapped = exposureMap(hdrCol, exposure);           
+            vec3 mapped = cinematicMap(hdrCol, exposure);  
+
+            mapped = pow(mapped, vec3(1.0 / gamma)); //gamma correction
+            FragColor = vec4(mapped, 1.0f);
         }
         )";
 

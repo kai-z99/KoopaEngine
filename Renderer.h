@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KoopaMath.h"
+#include "Definitions.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <unordered_map>
 
@@ -30,6 +31,7 @@ public:
     void SetCurrentColorDiffuse(Vec3 col);
     void SetCurrentNormal(const char* path);
     void SetSkybox(const std::vector<const char*>& faces);
+    void SetExposure(float exposure);
 
 	//Light functions
     void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity, bool shadow);
@@ -37,8 +39,6 @@ public:
     bool drawDebugLights;
 
 private:
-    static const unsigned int MAX_POINT_LIGHTS = 4;
-
     //Shader objects
     Shader* lightingShader; 
     Shader* debugLightShader;
@@ -124,7 +124,7 @@ private:
 
     //FRAMEBUFFERS
     void SetupFramebuffers();
-    unsigned int finalImageFBO, finalImageTextureRGB; 
+    unsigned int hdrFBO, hdrTextureRGBA; 
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int pointShadowMapFBO; //cube map texture is in point light struct
 

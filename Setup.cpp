@@ -263,7 +263,7 @@ namespace VertexBufferSetup
 
 namespace FramebufferSetup
 {
-    void SetupFinalImageFramebuffer(unsigned int& FBO, unsigned int& texture)
+    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int& texture)
     {
         unsigned int RBO;
         //create and bind
@@ -273,7 +273,7 @@ namespace FramebufferSetup
         //texture color buffer attachment
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); //create a new RGB texture with NULL as its data
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); //create a new RGB texture with NULL as its data
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glBindTexture(GL_TEXTURE_2D, 0);

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "KoopaMath.h"
+#include "Definitions.h"
 
 class GLFWwindow;
 class Shader;
@@ -49,6 +50,8 @@ public:
                 bool shadows = false);
 
     void SetDrawLightsDebug(bool on);
+
+    void SetCameraExposure(float exposure);
     
 
 private:
@@ -60,13 +63,10 @@ private:
 
     float currentFrame = 0;
     bool firstMouse = true;
-    float lastX = (float)SCR_WIDTH / 2.0f;
-    float lastY = (float)SCR_HEIGHT / 2.0f;
+    float lastX = (float)SCREEN_WIDTH / 2.0f;
+    float lastY = (float)SCREEN_HEIGHT / 2.0f;
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
-
-    const unsigned int SCR_WIDTH = 800;
-    const unsigned int SCR_HEIGHT = 600;
 
     void framebuffer_size_callback(GLFWwindow* window, int width, int height);
     void mouse_callback(GLFWwindow* window, double xposIn, double yposIn);

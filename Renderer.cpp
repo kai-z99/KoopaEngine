@@ -10,6 +10,7 @@
 #include "DrawCall.h"
 #include "Setup.h"
 
+
 #include <iostream>
 
 Renderer::Renderer()
@@ -32,7 +33,7 @@ Renderer::Renderer()
 
     //glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMap"), 3);   //GL_TEXTURE3
     // Bind each point shadow cubemap to a consecutive texture unit starting from GL_TEXTURE3
-    for (unsigned int i = 0; i < this->MAX_POINT_LIGHTS; i++) 
+    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++) 
     {
         std::string uniformName = "pointShadowMaps[" + std::to_string(i) + "]";
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, uniformName.c_str()), 3 + i);
@@ -48,7 +49,8 @@ Renderer::Renderer()
     //Final quad shader
     this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
     this->screenShader->use();
-    glUniform1i(glGetUniformLocation(this->screenShader->ID, "screenTexture"), 0); //GL_TEXTIRE0
+    glUniform1i(glGetUniformLocation(this->screenShader->ID, "hdrBuffer"), 0); //GL_TEXTIRE0
+    glUniform1f(glGetUniformLocation(this->screenShader->ID, "exposure"), DEFAULT_EXPOSURE); //set exposure
 
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
@@ -92,7 +94,7 @@ Renderer::~Renderer()
 
 void Renderer::BeginRenderFrame()
 {
-    //glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
     //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
@@ -123,9 +125,9 @@ void Renderer::EndRenderFrame()
 
     //DRAW INTO FINAL IMAGE---
     //bind FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, this->finalImageFBO); //off screen render
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames on the currently attached textures
-    glViewport(0, 0, 800, 600); //temp hardcode
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); //temp hardcode
     //render
     for (DrawCall* d : this->drawCalls)
     {
@@ -159,8 +161,8 @@ void Renderer::DrawFinalQuad()
     this->screenShader->use();
 
     glBindVertexArray(this->screenQuadVAO); //whole screen
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, this->finalImageTextureRGB); // main scene framebuffer texture to GL_TEXTURE0
+    glActiveTexture(GL_TEXTURE0); //0: hdrBuffer in shader
+    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA); // HDRframebuffer texture to hdrBuffer in shader
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
@@ -188,9 +190,9 @@ void Renderer::RenderDirShadowMap()
     glm::vec3 lightPos = -(this->dirLight.direction) * 3.0f; 
 
     //Snapshot properties
-    float nearPlane = 1.0f;
-    float farPlane = 10.5f;
-    float size = 10.0f; //side length of sqaure which is the shadowmap snapshot.
+    float nearPlane = D_NEAR_PLANE;
+    float farPlane = D_FAR_PLANE;
+    float size = D_FRUSTUM_SIZE; //side length of sqaure which is the shadowmap snapshot.
 
     //This matrix creates the size of the shadowMap snapshot.
     //Note, its a square for simplity rn.
@@ -250,7 +252,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     //bind framebuffer and viewport
     glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO); //write to the shadowMap
     glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
-    glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT); //make sure the window rectangle is the shadowmap size
+    glViewport(0, 0, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT); //make sure the window rectangle is the shadowmap size
     
     //send some uniforms
     this->lightingShader->use();
@@ -320,6 +322,12 @@ void Renderer::SetSkybox(const std::vector<const char*>& faces)
 {
     this->currentSkyboxTexture = TextureSetup::LoadTextureCubeMap(faces);
     this->usingSkybox = true;
+}
+
+void Renderer::SetExposure(float exposure)
+{
+    this->screenShader->use();
+    glUniform1f(glGetUniformLocation(this->screenShader->ID, "exposure"), exposure);
 }
 
 static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
@@ -496,7 +504,7 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
 
 void Renderer::SetupFramebuffers()
 {
-    FramebufferSetup::SetupFinalImageFramebuffer(this->finalImageFBO, this->finalImageTextureRGB);
+    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrTextureRGBA);
 
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
