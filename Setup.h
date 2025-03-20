@@ -14,7 +14,8 @@ namespace VertexBufferSetup
 namespace FramebufferSetup
 {
     //Note: RBO is lost.
-    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int& texture); //HDR buffer
+    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int colorBuffers[2]); //HDR buffer
+    void SetupTwoPassBlurFramebuffers(unsigned int FBOs[2], unsigned int colorBuffers[2]);
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h);
     void SetupPointShadowMapFramebuffer(unsigned int& FBO);
 }

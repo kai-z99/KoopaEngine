@@ -50,8 +50,15 @@ Renderer::Renderer()
     this->screenShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsScreenQuad);
     this->screenShader->use();
     glUniform1i(glGetUniformLocation(this->screenShader->ID, "hdrBuffer"), 0); //GL_TEXTIRE0
+    glUniform1i(glGetUniformLocation(this->screenShader->ID, "blurBuffer"), 1); //GL_TEXTIRE1
     glUniform1f(glGetUniformLocation(this->screenShader->ID, "exposure"), DEFAULT_EXPOSURE); //set exposure
 
+    //2 pass blur shader
+    this->blurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsBlur);
+    this->blurShader->use();
+    glUniform1i(glGetUniformLocation(this->blurShader->ID, "brightScene"), 0); //GL_TEXTIRE0
+    //horizontal is set in BlurBrightScene()
+    
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
 
@@ -140,8 +147,13 @@ void Renderer::EndRenderFrame()
     this->drawCalls.clear(); //raylib style
     //draw debug light into FBO is applicable
     if (this->drawDebugLights) this->DrawLightsDebug();
+
     //Draw skybox last (using z = w optimization)
     if (this->usingSkybox) this->DrawSkybox();
+    
+
+    //DO BLOOM STUFF---
+    this->BlurBrightScene();
 
     //DRAW QUAD ONTO SCREEN---
     //go to main FBO
@@ -162,18 +174,47 @@ void Renderer::DrawFinalQuad()
 
     glBindVertexArray(this->screenQuadVAO); //whole screen
     glActiveTexture(GL_TEXTURE0); //0: hdrBuffer in shader
-    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA); // HDRframebuffer texture to hdrBuffer in shader
+    glBindTexture(GL_TEXTURE_2D, this->hdrColorBuffers[0]); // 0:hdrTextureRGBA...HDRframebuffer texture to hdrBuffer in shader
+    glActiveTexture(GL_TEXTURE1); //1: blurBuffer in shader
+    glBindTexture(GL_TEXTURE_2D, this->twoPassBlurTexturesRGBA[1]);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::BlurBrightScene()
+{
+    blurShader->use();
+    unsigned int amount = 12; //6 passes
+    bool horizontal = true;
+    bool first = true;
+    for (unsigned int i = 0; i < amount; i++)
+    {
+        glUniform1i(glGetUniformLocation(blurShader->ID, "horizontal"), horizontal);
+        //Bind the correct FBO
+        glBindFramebuffer(GL_FRAMEBUFFER, this->twoPassBlurFBOs[horizontal]);
+        glViewport(0,0,SCREEN_WIDTH, SCREEN_HEIGHT);
+        //Bind textures
+        glActiveTexture(GL_TEXTURE0);   //          BrightScene
+        glBindTexture(GL_TEXTURE_2D, first ? this->hdrColorBuffers[1] : this->twoPassBlurTexturesRGBA[!horizontal]);
+        
+        glBindVertexArray(this->screenQuadVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        horizontal = !horizontal;
+        if (first) first = false;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void Renderer::DrawSkybox()
 {
     this->skyShader->use();
     glDepthFunc(GL_LEQUAL);
-
+    unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
+    glDrawBuffers(1, attachments);
     glBindVertexArray(this->skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->currentSkyboxTexture);
@@ -181,6 +222,8 @@ void Renderer::DrawSkybox()
 
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
+    unsigned int attachments2[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, attachments2);
 }
 
 void Renderer::RenderDirShadowMap()
@@ -373,6 +416,7 @@ void Renderer::DrawLightsDebug()
         model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
         glUniformMatrix4fv(glGetUniformLocation(this->debugLightShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
         glUniform3fv(glGetUniformLocation(debugLightShader->ID, "lightColor"), 1, glm::value_ptr(curr.color));
+        glUniform1f(glGetUniformLocation(debugLightShader->ID, "intensity"),curr.intensity);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 }
@@ -504,7 +548,8 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
 
 void Renderer::SetupFramebuffers()
 {
-    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrTextureRGBA);
+    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrColorBuffers);
+    FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
 
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);

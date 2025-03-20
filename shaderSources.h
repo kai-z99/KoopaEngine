@@ -41,7 +41,8 @@
 
         const char* fs1 = R"(
         #version 330 core
-        out vec4 FragColor;
+        layout (location = 0) out vec4 FragColor; //COLOR_ATTACHMENT_0
+        layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
         struct PointLight {    
             vec3 position;   
@@ -75,9 +76,9 @@
         in mat3 TBN;
         in vec4 FragPosLightSpace;
 
-        uniform sampler2D currentDiffuse;   //0
-        uniform sampler2D currentNormalMap; //1
-        uniform sampler2D dirShadowMap;     //2
+        uniform sampler2D currentDiffuse;         //0
+        uniform sampler2D currentNormalMap;       //1
+        uniform sampler2D dirShadowMap;           //2
         uniform samplerCube pointShadowMaps[4];   //3
         uniform float farPlane; //for point shadow calculation
         uniform vec3 baseColor; //Use this if not using a diffuse texture
@@ -112,6 +113,10 @@
             color += sceneAmbient;
 
             FragColor = vec4(color, 1.0f);
+            
+            float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+            if (brightness > 1.0) BrightColor = vec4(color, 1.0f);
+            else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
         }
     
         float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
@@ -186,7 +191,7 @@
             vec3 halfwayDir = normalize(lightDir + viewDir);
             float spec;
             spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
-    
+            
             // attenuation
             float distance    = length(light.position - fragPos);
             float attenuation = 1.0 / (distance * distance); //quadratic attenuation
@@ -216,7 +221,7 @@
             {
                 return vec3(0.0f, 0.0f, 0.0f);
             }
-
+            
             vec3 direction = -normalize(light.direction);
 
             //diffuse
@@ -246,14 +251,19 @@
 
         const char* fsLight = R"(
         #version 330 core
-        out vec4 FragColor;
-    
+        layout (location = 0) out vec4 FragColor; //COLOR_ATTACHEMNT0
+        layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHEMNT1
+        
         uniform vec3 lightColor;
+        uniform float intensity;
 
         void main()
         {
-            FragColor = vec4(lightColor, 1.0); // a cube, that doesnt acutally emit light remember its purely a visual
-            //FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            FragColor = vec4(intensity * lightColor, 1.0); // a cube, that doesnt acutally emit light remember its purely a visual
+            
+            float brightness = dot(FragColor.rgb, vec3(0.2126f, 0.7152f, 0.0722f)); //Luminance formula, based on human vision
+            if (brightness > 1.0) BrightColor = vec4(lightColor, 1.0f);
+            else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
         }
         )";
 
@@ -277,7 +287,8 @@
   
         in vec2 TexCoords;
     
-        uniform sampler2D hdrBuffer;
+        uniform sampler2D hdrBuffer;    //0
+        uniform sampler2D blurBuffer;   //1
         uniform float exposure;
 
         vec3 reinhardMap(vec3 hdrCol)
@@ -318,14 +329,57 @@
             const float gamma = 2.2;
             
             vec3 hdrCol = texture(hdrBuffer, TexCoords).rgb;  
-            
+            vec3 blurCol = texture(blurBuffer, TexCoords).rgb;
+            hdrCol += blurCol;
             //vec3 mapped = reinhardMap(hdrCol);
-            //vec3 mapped = exposureMap(hdrCol, exposure);           
-            vec3 mapped = cinematicMap(hdrCol, exposure);  
-
+            vec3 mapped = exposureMap(hdrCol, exposure);           
+            //vec3 mapped = cinematicMap(hdrCol, exposure);  
             mapped = pow(mapped, vec3(1.0 / gamma)); //gamma correction
             FragColor = vec4(mapped, 1.0f);
         }
+        )";
+
+        const char* fsBlur = R"(
+        #version 330 core
+        out vec4 FragColor;
+        
+        in vec2 TexCoords;
+        
+        uniform sampler2D brightScene;
+        uniform bool horizontal;
+
+        float weights[5] = float[] (0.227027f, 0.1945946f, 0.1216216f, 0.054054f, 0.016216f); //gaussian
+        
+        void main()
+        {
+            vec2 texOffset = 1.0f / textureSize(brightScene, 0); //size of one texel
+            vec3 result = vec3(0.0f);
+            
+            //Contribution of the current fragment
+            result += texture(brightScene, TexCoords).rgb * weights[0];
+            
+            if (horizontal)
+            {
+                for (int i = 1; i < 5; i++)
+                {
+                    vec2 currentSampleOffset = vec2(texOffset.x * i, 0.0f);
+                    result += texture(brightScene, TexCoords + currentSampleOffset).rgb * weights[i];
+                    result += texture(brightScene, TexCoords - currentSampleOffset).rgb * weights[i];
+                }
+            }
+            else
+            {
+                for (int i = 1; i < 5; i++)
+                {
+                    vec2 currentSampleOffset = vec2(0.0f, texOffset.y * i);
+                    result += texture(brightScene, TexCoords + currentSampleOffset).rgb * weights[i];
+                    result += texture(brightScene, TexCoords - currentSampleOffset).rgb * weights[i];
+                }
+            }
+
+            FragColor = vec4(result, 1.0f);
+        }
+ 
         )";
 
         const char* vsDirShadow = R"(
@@ -410,7 +464,7 @@
 
         const char* fsSkybox = R"(
         #version 330 core
-        out vec4 FragColor;
+        layout (location = 0) out vec4 FragColor;
 
         in vec3 TexCoords;
 

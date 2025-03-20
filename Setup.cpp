@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <stb_image.h>
 
+#include "Definitions.h"
 #include <iostream>
 
 namespace VertexBufferSetup
@@ -263,28 +264,37 @@ namespace VertexBufferSetup
 
 namespace FramebufferSetup
 {
-    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int& texture)
+    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int colorBuffers[2])
     {
         unsigned int RBO;
         //create and bind
         glGenFramebuffers(1, &FBO);
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
-        //texture color buffer attachment
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 800, 600, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); //create a new RGB texture with NULL as its data
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+        //texture color buffer attachments (one for normal scene, one for only bright objects)
+        glGenTextures(2, colorBuffers);
+
+        for (unsigned int i = 0; i < 2; i++)
+        {
+            glBindTexture(GL_TEXTURE_2D, colorBuffers[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL); //16f to hold greater than 1.0
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, colorBuffers[i], 0); //attach to framebuffer
+        }                                           //layout location here
 
         //renderbuffer attachment (depth/stencil)
         glGenRenderbuffers(1, &RBO);
         glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, 800, 600); //allocate memory 
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT); //allocate memory 
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
+
+        //Need this for MRT
+        unsigned int attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, attachments);
 
         //finish
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -293,7 +303,29 @@ namespace FramebufferSetup
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    void SetupTwoPassBlurFramebuffers(unsigned int FBOs[2], unsigned int colorBuffers[2])
+    {
+        //generate
+        glGenFramebuffers(2, FBOs);
+        glGenTextures(2, colorBuffers);
+                  
+        for (int i = 0; i < 2; i++)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, FBOs[i]);
+            glBindTexture(GL_TEXTURE_2D, colorBuffers[i]);
+            //set texture params
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // clamp to the edge as the blur filter would otherwise sample repeated texture values
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); //eg 1.1 -> 1.0 , -22.2 -> 0.0
+            //attach to fb
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBuffers[i], 0);
 
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                std::cout << "Framebuffer not complete!" << std::endl;
+        }
+    }
 
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h)
     {

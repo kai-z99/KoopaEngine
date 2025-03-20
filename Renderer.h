@@ -46,6 +46,7 @@ private:
     Shader* dirShadowShader;
     Shader* pointShadowShader;
     Shader* skyShader;
+    Shader* blurShader;
 
     //TEXTURES
     unsigned int currentDiffuseTexture;
@@ -114,6 +115,7 @@ private:
     //DRAWING
     std::vector<DrawCall*> drawCalls;
     void DrawFinalQuad();
+    void BlurBrightScene();
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
@@ -124,7 +126,8 @@ private:
 
     //FRAMEBUFFERS
     void SetupFramebuffers();
-    unsigned int hdrFBO, hdrTextureRGBA; 
+    unsigned int hdrFBO, hdrColorBuffers[2]; //0: hdrTextureRGBA 1: hdrTextureBrightRGBA
+    unsigned int twoPassBlurFBOs[2], twoPassBlurTexturesRGBA[2];
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int pointShadowMapFBO; //cube map texture is in point light struct
 
