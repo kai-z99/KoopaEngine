@@ -2,6 +2,8 @@
 
 3D Programming has never been easier!
 
+![demo](koopaEngineDemo1Trim4.gif)
+
 ```c
 #include "KoopaEngine.h"
 
