@@ -116,6 +116,7 @@ private:
     std::vector<DrawCall*> drawCalls;
     void DrawFinalQuad();
     void BlurBrightScene();
+    Vec4 clearColor;
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
@@ -128,6 +129,7 @@ private:
     void SetupFramebuffers();
     unsigned int hdrFBO, hdrColorBuffers[2]; //0: hdrTextureRGBA 1: hdrTextureBrightRGBA
     unsigned int twoPassBlurFBOs[2], twoPassBlurTexturesRGBA[2];
+    unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int pointShadowMapFBO; //cube map texture is in point light struct
 

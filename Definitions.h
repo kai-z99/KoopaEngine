@@ -20,3 +20,6 @@ enum ToneFunction
 constexpr float D_FRUSTUM_SIZE = 10.0f;
 constexpr float D_NEAR_PLANE = 1.0f;
 constexpr float D_FAR_PLANE = 10.5f;
+
+//amount off passes of gaussian blur in bloom
+constexpr unsigned int BLUR_PASSES = 5;

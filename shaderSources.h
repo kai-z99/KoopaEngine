@@ -127,14 +127,16 @@
 
             projCoords = projCoords * 0.5 + 0.5;  
             //Now: {[0,1] , [0,1], [0,1]} (if in frustum, AKA will show in the shadow snapshot, not clipped out)
+            
+            float fragDepth = projCoords.z;
 
             float closestDepth = texture(dirShadowMap, projCoords.xy).r; //note: this can sample outside [0,1] if its outsidde the frag was outside frustum. (clipped out)
             //if it does, it return 1.0f due to the wrapping method we set.
-            float fragDepth = projCoords.z;
+            
 
             if (fragDepth > 1.0f) return 0.0f; //Outside the far plane
 
-            float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.005); //mote bias with more angle.
+            float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.005); //more bias with more angle.
             float shadow = 0.0f;
 
             //PCF---
@@ -158,7 +160,17 @@
 
             return shadow;  
         }
+        
 
+        const vec3 sampleOffsetDirections[20] = vec3[]
+        (
+           vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
+           vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+           vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+           vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+           vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+        );  
+    
         float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, samplerCube map)
         {
             vec3 lightToFrag = fragPos - lightPos;
@@ -169,8 +181,24 @@
         
             float shadow = 0.0f;
             float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
+            
+            //PCF---
+            int samples = 20;
+            float viewDistance = length(viewPos - fragPos);
+            float diskRadius = (1.0 + (viewDistance / farPlane)) / 25.0; 
+    
+            for(int i = 0; i < samples; ++i)
+            {
+                float closestDepth = texture(map, lightToFrag + sampleOffsetDirections[i] * diskRadius).r;
+                closestDepth *= farPlane;   // move to [0, farPlane]
 
-            if (fragDepth - bias > closestDepth) shadow += 1.0f;
+                if (fragDepth - bias > closestDepth) shadow += 1.0;
+            
+            }
+
+            shadow /= float(samples);  
+
+            //if (fragDepth - bias > closestDepth) shadow += 1.0f;
 
             return shadow;
         }

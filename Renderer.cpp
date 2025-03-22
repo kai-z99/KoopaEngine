@@ -82,6 +82,8 @@ Renderer::Renderer()
     this->SetupFramebuffers();
 
     this->usingSkybox = false;
+
+    this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 Renderer::~Renderer()
@@ -101,8 +103,8 @@ Renderer::~Renderer()
 
 void Renderer::BeginRenderFrame()
 {
-    //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
-    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
 void Renderer::EndRenderFrame()
@@ -132,9 +134,14 @@ void Renderer::EndRenderFrame()
 
     //DRAW INTO FINAL IMAGE---
     //bind FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //remove stuff from previous frames on the currently attached textures
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); //temp hardcode
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
+    //clear main scene with current color, clear bright scene with black always.
+    glClearBufferfv(GL_COLOR, 0, (float*) & this->clearColor); 
+    GLfloat black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    glClearBufferfv(GL_COLOR, 1, black); 
+
+    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); 
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); 
     //render
     for (DrawCall* d : this->drawCalls)
     {
@@ -165,12 +172,15 @@ void Renderer::EndRenderFrame()
     //CLEANUP---
     //reset lights for the next frame
     this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
+    
+    
 } 
 
 void Renderer::DrawFinalQuad()
 {
     glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     this->screenShader->use();
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
     glBindVertexArray(this->screenQuadVAO); //whole screen
     glActiveTexture(GL_TEXTURE0); //0: hdrBuffer in shader
@@ -185,8 +195,22 @@ void Renderer::DrawFinalQuad()
 
 void Renderer::BlurBrightScene()
 {
+    //blit bright scene into half res texture
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, this->hdrFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->halfResBrightFBO);
+    glReadBuffer(GL_COLOR_ATTACHMENT1); //bright-only scene
+
+    glBlitFramebuffer(
+        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,      // Source rectangle (full resolution)
+        0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,    // Destination rectangle (half resolution)
+        GL_COLOR_BUFFER_BIT,                    // Copy only the color buffer
+        GL_LINEAR                               // Linear filter for downsampling
+    );
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
     blurShader->use();
-    unsigned int amount = 12; //6 passes
+    unsigned int amount = BLUR_PASSES * 2; //* 2 since its a two pass blur
     bool horizontal = true;
     bool first = true;
     for (unsigned int i = 0; i < amount; i++)
@@ -194,7 +218,7 @@ void Renderer::BlurBrightScene()
         glUniform1i(glGetUniformLocation(blurShader->ID, "horizontal"), horizontal);
         //Bind the correct FBO
         glBindFramebuffer(GL_FRAMEBUFFER, this->twoPassBlurFBOs[horizontal]);
-        glViewport(0,0,SCREEN_WIDTH, SCREEN_HEIGHT);
+        glViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
         //Bind textures
         glActiveTexture(GL_TEXTURE0);   //          BrightScene
         glBindTexture(GL_TEXTURE_2D, first ? this->hdrColorBuffers[1] : this->twoPassBlurTexturesRGBA[!horizontal]);
@@ -328,8 +352,10 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
 void Renderer::ClearScreen(Vec4 col)
 {
+
     glClearColor(col.r, col.g, col.b, col.a); //This sets what glClear will clear as.
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //fill it with that clear color.
+    this->drawCalls.clear();
+    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //fill it with that clear color.
     //note: All draw calls draw onto this buffer so each glClearColor will be updated.
 }
 
@@ -550,6 +576,7 @@ void Renderer::SetupFramebuffers()
 {
     FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrColorBuffers);
     FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
+    FramebufferSetup::SetupHalfResBrightFramebuffer(this->halfResBrightFBO, this->halfResBrightTextureRGBA);
 
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
