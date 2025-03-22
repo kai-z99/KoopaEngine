@@ -28,32 +28,52 @@ public:
 
     void ClearScreen(Vec4 color);
 
-    void DrawTriangle(Vec3 pos = { 0.0f, 0.0f, 0.0f }, 
-                        Vec4 rotation = {0.0f, 1.0f, 0.0f, 0.0f});
+    void DrawTriangle
+    (
+        Vec3 pos = { 0.0f, 0.0f, 0.0f }, 
+        Vec4 rotation = {0.0f, 1.0f, 0.0f, 0.0f}
+    );
 
-    void DrawCube(Vec3 pos = { 0.0f, 0.0f, 0.0f }, 
-                    Vec3 size = {1.0f, 1.0f, 1.0f}, 
-                    Vec4 rotation = { 0.0f, 1.0f, 0.0f, 0.0f });
+    void DrawCube
+    (
+        Vec3 pos = { 0.0f, 0.0f, 0.0f }, 
+        Vec3 size = {1.0f, 1.0f, 1.0f}, 
+        Vec4 rotation = { 0.0f, 1.0f, 0.0f, 0.0f }
+    );
 
-    void DrawPlane(Vec3 pos = { 0,0,0 }, 
-                Vec2 size = { 1,1 }, 
-                Vec4 rotation = { 0,1,0,0 });
+    void DrawPlane
+    (
+        Vec3 pos = { 0,0,0 }, 
+        Vec2 size = { 1,1 }, 
+        Vec4 rotation = { 0,1,0,0 }
+    );
 
-    void DrawPointLight(Vec3 pos = {0,0,0},
-                    Vec3 col = {1,1,1},
-                    float intensity = 1.0f,
-                    bool shadows = false);
+    void DrawSphere
+    (
+        Vec3 pos = { 0,0,0 },
+        Vec3 size = { 1,1,1 },
+        Vec4 rotation = { 0,1,0,0 }
+    );
 
-    void DrawDirLight(Vec3 dir = { 1.0f, -1.0f, 1.0f },
-                Vec3 col = { 1.0f, 1.0f, 1.0f }, 
-                float intesity = 1.0f,
-                bool shadows = false);
+    void DrawPointLight
+    (
+        Vec3 pos = {0,0,0},
+        Vec3 col = {1,1,1},
+        float intensity = 1.0f,
+        bool shadows = false
+    );
+
+    void DrawDirLight
+    (
+        Vec3 dir = { 1.0f, -1.0f, 1.0f },
+        Vec3 col = { 1.0f, 1.0f, 1.0f }, 
+        float intesity = 1.0f,
+        bool shadows = false
+    );
 
     void SetDrawLightsDebug(bool on);
-
     void SetCameraExposure(float exposure);
     
-
 private:
     void DrawFinalQuad();
 

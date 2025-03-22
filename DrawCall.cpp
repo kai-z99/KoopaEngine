@@ -25,7 +25,8 @@ void DrawCall::Render(Shader* shader)
 {
     shader->use();
     
-    if (!usingCulling) glDisable(GL_CULL_FACE);
+    if (usingCulling) glEnable(GL_CULL_FACE);
+    else glDisable(GL_CULL_FACE);
 
     glBindVertexArray(VAO);
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->model));

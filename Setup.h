@@ -5,6 +5,7 @@
 namespace VertexBufferSetup
 {
     unsigned int SetupTriangleBuffers();
+    unsigned int SetupSphereBuffers();
     unsigned int SetupCubeBuffers();
     unsigned int SetupPlaneBuffers();
     unsigned int SetupScreenQuadBuffers();

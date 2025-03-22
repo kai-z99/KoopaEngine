@@ -127,6 +127,115 @@ namespace VertexBufferSetup
         return VAO;
     }
 
+    unsigned int SetupSphereBuffers()
+    {
+        unsigned int VAO, VBO;
+
+        std::vector<float> vertices;
+
+        // Each vertex will have: 3 (position) + 3 (normal) + 2 (texCoord) + 3 (tangent) = 11 floats.
+        // Loop over each quad on the sphere’s surface and compute two triangles per quad.
+        for (unsigned int y = 0; y < SPHERE_Y_SEGMENTS; ++y)
+        {
+            for (unsigned int x = 0; x < SPHERE_X_SEGMENTS; ++x)
+            {
+                // Compute normalized texture coordinates for the current quad corners.
+                float u0 = (float)x / SPHERE_X_SEGMENTS;
+                float u1 = (float)(x + 1) / SPHERE_X_SEGMENTS;
+                float v0 = (float)y / SPHERE_Y_SEGMENTS;
+                float v1 = (float)(y + 1) / SPHERE_Y_SEGMENTS;
+
+                // Compute positions for the four corners of the quad.
+                float x0 = std::cos(u0 * 2.0f * PI) * std::sin(v0 * PI);
+                float y0 = std::cos(v0 * PI);
+                float z0 = std::sin(u0 * 2.0f * PI) * std::sin(v0 * PI);
+
+                float x1 = std::cos(u1 * 2.0f * PI) * std::sin(v0 * PI);
+                float y1 = std::cos(v0 * PI);
+                float z1 = std::sin(u1 * 2.0f * PI) * std::sin(v0 * PI);
+
+                float x2 = std::cos(u0 * 2.0f * PI) * std::sin(v1 * PI);
+                float y2 = std::cos(v1 * PI);
+                float z2 = std::sin(u0 * 2.0f * PI) * std::sin(v1 * PI);
+
+                float x3 = std::cos(u1 * 2.0f * PI) * std::sin(v1 * PI);
+                float y3 = std::cos(v1 * PI);
+                float z3 = std::sin(u1 * 2.0f * PI) * std::sin(v1 * PI);
+
+                // Lambda to add a vertex's data to our vector.
+                auto addVertex = [&](float posX, float posY, float posZ, float u, float v) {
+                    // Position
+                    vertices.push_back(posX);
+                    vertices.push_back(posY);
+                    vertices.push_back(posZ);
+                    // Normal (same as position for a unit sphere)
+                    vertices.push_back(posX);
+                    vertices.push_back(posY);
+                    vertices.push_back(posZ);
+                    // Texture coordinates
+                    vertices.push_back(u);
+                    vertices.push_back(v);
+                    // Tangent: derivative with respect to u (ignoring the v-dependent factor)
+                    float tanX = -std::sin(u * 2.0f * PI);
+                    float tanY = 0.0f;
+                    float tanZ = std::cos(u * 2.0f * PI);
+                    // Normalize tangent
+                    float length = std::sqrt(tanX * tanX + tanY * tanY + tanZ * tanZ);
+                    if (length > 0.0f)
+                    {
+                        tanX /= length;
+                        tanY /= length;
+                        tanZ /= length;
+                    }
+                    vertices.push_back(tanX);
+                    vertices.push_back(tanY);
+                    vertices.push_back(tanZ);
+                    };
+
+                // Instead of v0, v2, v1 => do v0, v1, v2
+                addVertex(x0, y0, z0, u0, v0); // v0
+                addVertex(x1, y1, z1, u1, v0); // v1
+                addVertex(x2, y2, z2, u0, v1); // v2
+
+                // Instead of v1, v2, v3 => do v1, v3, v2
+                addVertex(x1, y1, z1, u1, v0); // v1
+                addVertex(x3, y3, z3, u1, v1); // v3
+                addVertex(x2, y2, z2, u0, v1); // v2
+            }
+        }
+
+        // Create and bind VAO and VBO, then upload vertex data.
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+
+        glBindVertexArray(VAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+        // Set vertex attribute pointers:
+        // Position attribute (location = 0): 3 floats.
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+
+        // Normal attribute (location = 1): 3 floats.
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
+
+        // Texture coordinate attribute (location = 2): 2 floats.
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+
+        // Tangent attribute (location = 3): 3 floats.
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+
+        glBindVertexArray(0);
+
+        return VAO;
+    }
+
+
     unsigned int SetupPlaneBuffers()
     {
         unsigned int VAO, VBO;

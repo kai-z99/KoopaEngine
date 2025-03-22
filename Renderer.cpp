@@ -103,8 +103,8 @@ Renderer::~Renderer()
 
 void Renderer::BeginRenderFrame()
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
+    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
 void Renderer::EndRenderFrame()
@@ -318,7 +318,6 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
     //bind framebuffer and viewport
     glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO); //write to the shadowMap
-    glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer
     glViewport(0, 0, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT); //make sure the window rectangle is the shadowmap size
     
     //send some uniforms
@@ -425,6 +424,12 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
     this->drawCalls.push_back(new DrawCall(this->planeVAO, 6, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
+}
+
+void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
+{
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
+    this->drawCalls.push_back(new DrawCall(this->sphereVAO, SPHERE_X_SEGMENTS * SPHERE_Y_SEGMENTS * 6, model));
 }
 
 void Renderer::DrawLightsDebug()
@@ -594,6 +599,7 @@ void Renderer::SetupVertexBuffers()
     this->triangleVAO = VertexBufferSetup::SetupTriangleBuffers();
     this->cubeVAO = VertexBufferSetup::SetupCubeBuffers();
     this->planeVAO = VertexBufferSetup::SetupPlaneBuffers();
+    this->sphereVAO = VertexBufferSetup::SetupSphereBuffers();
     this->screenQuadVAO = VertexBufferSetup::SetupScreenQuadBuffers();
     this->skyboxVAO = VertexBufferSetup::SetupSkyboxBuffers();
 }

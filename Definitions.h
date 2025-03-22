@@ -1,5 +1,7 @@
 #pragma once
 
+constexpr float PI = 3.14159265359f;
+
 constexpr unsigned int SCREEN_WIDTH = 800;
 constexpr unsigned int SCREEN_HEIGHT = 600;
 
@@ -23,3 +25,7 @@ constexpr float D_FAR_PLANE = 10.5f;
 
 //amount off passes of gaussian blur in bloom
 constexpr unsigned int BLUR_PASSES = 5;
+
+//sphere vertex generation
+constexpr unsigned int SPHERE_X_SEGMENTS = 64;
+constexpr unsigned int SPHERE_Y_SEGMENTS = 64;

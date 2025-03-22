@@ -22,9 +22,10 @@ public:
     //Geometry drawing functions
     void SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
     void ClearScreen(Vec4 col);
-    void DrawTriangle(Vec3 pos = { 0,0,0 }, Vec4 rotation = { 0,1,0,0 });
-    void DrawCube(Vec3 pos = { 0,0,0 }, Vec3 size = { 1,1,1 }, Vec4 rotation = { 0,1,0,0 });
-    void DrawPlane(Vec3 pos = { 0,0,0 }, Vec2 size = { 1,1 }, Vec4 rotation = { 0,1,0,0 });
+    void DrawTriangle(Vec3 pos, Vec4 rotation);
+    void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
+    void DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation);
+    void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
     void SetCurrentDiffuse(const char* path);
@@ -121,7 +122,9 @@ private:
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
     unsigned int triangleVAO;
-    unsigned int cubeVAO, planeVAO;
+    unsigned int cubeVAO;
+    unsigned int sphereVAO;
+    unsigned int planeVAO;
     unsigned int screenQuadVAO;
     unsigned int skyboxVAO;
 
