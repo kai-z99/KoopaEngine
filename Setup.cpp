@@ -448,7 +448,7 @@ namespace FramebufferSetup
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
+        
         //attach
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 
@@ -480,6 +480,40 @@ namespace FramebufferSetup
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0);
         glDrawBuffer(GL_NONE); //No need for color buffer
         glReadBuffer(GL_NONE); //No need for color buffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void SetupCascadedShadowMapTextures(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, unsigned int numCascades)
+    {
+        //create fb
+        glGenFramebuffers(1, &FBO);
+
+        //create tex
+        glGenTextures(1, &textureArray);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArray); //texture array
+        //3d, depth value is the amount of textures              one partition: 2 cascades etc...
+        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT32F, w, h, numCascades, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL); 
+        //params
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+        float borderCol[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, borderCol);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+        //attach to fb
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, textureArray, 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+
+        int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!";
+        }
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 

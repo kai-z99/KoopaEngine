@@ -7,10 +7,15 @@
 
 class Shader;
 class DrawCall;
+class Camera;
 
 class Renderer
 {
 public:
+    //TEMP
+    Camera* cam;
+
+
     //Construction
 	Renderer();
 	~Renderer();
@@ -45,6 +50,7 @@ private:
     Shader* debugLightShader;
     Shader* screenShader;
     Shader* dirShadowShader;
+    Shader* cascadeShadowShader;
     Shader* pointShadowShader;
     Shader* skyShader;
     Shader* blurShader;
@@ -105,9 +111,15 @@ private:
 
     //SHADOWS
     //directional
-    unsigned int D_SHADOW_WIDTH = 2048, D_SHADOW_HEIGHT = 2048;
+    unsigned int D_SHADOW_WIDTH = 1024, D_SHADOW_HEIGHT = 1024;
     void RenderDirShadowMap();
-
+    //cascade
+    unsigned int CASCADE_SHADOW_WIDTH = 1024, CASCADE_SHADOW_HEIGHT = 1024;
+    std::vector<float> cascadeLevels;
+    std::vector<glm::vec4> GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view);
+    glm::mat4 CalculateLightSpaceCascadeMatrix(float near, float far);
+    std::vector<glm::mat4> GetCascadeMatrices();
+    void RenderCascadedShadowMap();
     //point
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
     void RenderPointShadowMap(unsigned int index);
@@ -134,6 +146,7 @@ private:
     unsigned int twoPassBlurFBOs[2], twoPassBlurTexturesRGBA[2];
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
+    unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
     unsigned int pointShadowMapFBO; //cube map texture is in point light struct
 
 };

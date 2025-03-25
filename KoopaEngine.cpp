@@ -70,10 +70,13 @@ void KoopaEngine::BeginFrame()
     lastFrame = this->currentFrame;
 
     glm::mat4 view = this->camera->GetViewMatrix();
-    glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, DEFAULT_NEAR, DEFAULT_FAR);
     this->renderer->SetCameraMatrices(view, projection, this->camera->position);
 
     this->renderer->BeginRenderFrame(); //sets to screen FB
+
+    //TEMP
+    this->renderer->cam = this->camera;
 }
 
 void KoopaEngine::EndFrame()

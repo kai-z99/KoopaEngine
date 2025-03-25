@@ -80,6 +80,7 @@
         uniform sampler2D currentNormalMap;       //1
         uniform sampler2D dirShadowMap;           //2
         uniform samplerCube pointShadowMaps[4];   //3
+        uniform sampler2DArray cascadeShadowMaps; //4
         uniform float farPlane; //for point shadow calculation
         uniform vec3 baseColor; //Use this if not using a diffuse texture
         uniform vec3 viewPos;
@@ -433,6 +434,32 @@
 	        gl_FragDepth = gl_FragCoord.z; //set depth buffer manually if we want (this is done auto though so who cares...)
         }
         )";
+
+        const char* vsCascadedShadow = R"(
+        #version 330 core
+
+        layout (location = 0) in vec3 aPos;
+
+        uniform mat4 lightSpaceMatrix; //view and projection combined
+        uniform mat4 model;
+
+        //This vertex shader simply converts a fragment to light space. Nothing else
+        void main()
+        {
+            gl_Position = lightSpaceMatrix * model * vec4(aPos, 1.0);
+        }  
+        )";
+
+        const char* fsCascadedShadow = R"(
+        #version 330 core
+
+        void main()
+        {
+	        gl_FragDepth = gl_FragCoord.z; //set depth buffer manually if we want (this is done auto though so who cares...)
+        }
+        )";
+
+
 
         const char* vsPointShadow = R"(
         #version 330 core

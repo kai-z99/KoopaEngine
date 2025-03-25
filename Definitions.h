@@ -8,8 +8,10 @@ constexpr unsigned int SCREEN_HEIGHT = 600;
 //max amount of point lights allowed
 constexpr unsigned int MAX_POINT_LIGHTS = 4;
 
-//Starting exposure for the camera
+//camera
 constexpr float DEFAULT_EXPOSURE = 0.5f;
+constexpr float DEFAULT_NEAR = 0.1f;
+constexpr float DEFAULT_FAR = 100.0f;
 
 //Tone mapping methods
 enum ToneFunction
@@ -29,3 +31,6 @@ constexpr unsigned int BLUR_PASSES = 5;
 //sphere vertex generation
 constexpr unsigned int SPHERE_X_SEGMENTS = 64;
 constexpr unsigned int SPHERE_Y_SEGMENTS = 64;
+
+//cascading shadowmap
+constexpr unsigned int NUM_CASCADES = 4;

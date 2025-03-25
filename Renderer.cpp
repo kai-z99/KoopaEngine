@@ -9,6 +9,7 @@
 #include "Shader.h"
 #include "DrawCall.h"
 #include "Setup.h"
+#include "Camera.h"
 
 
 #include <iostream>
@@ -61,7 +62,8 @@ Renderer::Renderer()
     
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
-
+    //Cascade shadow shader
+    this->cascadeShadowShader = new Shader(ShaderSources::vsCascadedShadow, ShaderSources::fsCascadedShadow);
     //point shadow shader
     this->pointShadowShader = new Shader(ShaderSources::vsPointShadow, ShaderSources::fsPointShadow);
 
@@ -84,6 +86,8 @@ Renderer::Renderer()
     this->usingSkybox = false;
 
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
 }
 
 Renderer::~Renderer()
@@ -112,6 +116,7 @@ void Renderer::EndRenderFrame()
     //RENDER SHADOW MAPS---
     //dir
     if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
+    this->RenderCascadedShadowMap();
     //point
     for (int i = 0; i < currentFramePointLightCount; i++)
     {
@@ -293,6 +298,124 @@ void Renderer::RenderDirShadowMap()
         d->Render(this->dirShadowShader);
         d->SetCulling(true);
     }
+}
+
+std::vector<glm::vec4> Renderer::GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view)
+{
+    glm::mat4 inverse = glm::inverse(proj * view);
+
+    std::vector<glm::vec4> corners;
+    
+    for (int x = -1; x <= 1; x += 2)
+    {
+        for (int y = -1; y <= 1; y += 2)
+        {
+            for (int z = -1; z <= 1; z += 2)
+            {
+                glm::vec4 corner = inverse * glm::vec4(x,y,z, 1.0f); 
+                corners.push_back(corner / corner.w); //perspective divide
+            }
+        }
+    }
+
+    return corners;
+}
+
+glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
+{
+    glm::mat4 proj = glm::perspective(glm::radians(cam->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, near, far);
+    glm::mat4 view = cam->GetViewMatrix();
+    std::vector<glm::vec4> corners = this->GetFrustumCornersWorldSpace(proj, view);
+
+    glm::vec3 center = glm::vec3(0.0f);
+
+    //Add all positions of the corners then divide to get center of cam frustum in world space.
+    for (const auto& c : corners)
+    {
+        center += glm::vec3(c); //vec4 -> vec3
+    }
+    center /= corners.size();
+
+    //View
+    glm::mat4 lightView = glm::lookAt(center - glm::normalize(this->dirLight.direction), center, glm::vec3(0.0f, 1.0f, 0.0f));
+    //Proj
+    float minX = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float minY = std::numeric_limits<float>::max();
+    float maxY = std::numeric_limits<float>::lowest();
+    float minZ = std::numeric_limits<float>::max();
+    float maxZ = std::numeric_limits<float>::lowest();
+    for (const auto& c : corners)
+    {
+        glm::vec4 cLightSpace = lightView * c;
+        minX = std::min(minX, cLightSpace.x);
+        maxX = std::max(maxX, cLightSpace.x);
+        minY = std::min(minY, cLightSpace.y);
+        maxY = std::max(maxY, cLightSpace.y);
+        minZ = std::min(minZ, cLightSpace.z);
+        maxZ = std::max(maxZ, cLightSpace.z);
+    }
+
+    //Pull in near plane, push out far plane 
+    float zMult = 10.0f;
+    minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
+    maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
+
+    glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+
+    return lightProjection * lightView;
+}
+
+std::vector<glm::mat4> Renderer::GetCascadeMatrices()
+{
+    std::vector<glm::mat4> ret;
+
+    for (int i = 0; i < this->cascadeLevels.size() + 1; i++)
+    {
+        if (i == 0)
+        {
+            ret.push_back(CalculateLightSpaceCascadeMatrix(DEFAULT_NEAR, this->cascadeLevels[i]));
+        }
+        else if (i < this->cascadeLevels.size())
+        {
+            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], this->cascadeLevels[i]));
+        }
+        else
+        {
+            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], DEFAULT_FAR));
+        }
+    }
+
+    return ret;
+}
+
+void Renderer::RenderCascadedShadowMap()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, this->cascadeShadowMapFBO); //texture array is attached
+    glViewport(0, 0, CASCADE_SHADOW_WIDTH, CASCADE_SHADOW_HEIGHT);
+    this->cascadeShadowShader->use();
+
+    std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
+    std::cout << lightSpaceMatrices.size() << '\n';
+
+    for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
+    {   
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        //send uniform
+        glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
+            false, glm::value_ptr(lightSpaceMatrices[i]));
+       
+        //note: model matrix is sent in d->Render()
+        for (DrawCall* d : this->drawCalls)
+        {
+            d->SetCulling(false);
+            d->Render(this->cascadeShadowShader);
+            d->SetCulling(true);
+        }
+    }
+
 }
 
 void Renderer::RenderPointShadowMap(unsigned int index)
@@ -585,6 +708,9 @@ void Renderer::SetupFramebuffers()
 
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
+
+    FramebufferSetup::SetupCascadedShadowMapTextures(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
+        this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, this->cascadeLevels.size() + 1);
 
     //Point shadows: one FBO, many textures
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
