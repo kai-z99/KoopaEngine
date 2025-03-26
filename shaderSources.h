@@ -459,8 +459,6 @@
         }
         )";
 
-
-
         const char* vsPointShadow = R"(
         #version 330 core
 

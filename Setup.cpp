@@ -483,7 +483,7 @@ namespace FramebufferSetup
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void SetupCascadedShadowMapTextures(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, unsigned int numCascades)
+    void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, unsigned int numCascades)
     {
         //create fb
         glGenFramebuffers(1, &FBO);
@@ -504,15 +504,17 @@ namespace FramebufferSetup
 
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
         //attach to fb
-        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, textureArray, 0);
+        //glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, textureArray, 0);
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
 
+        /*
         int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
         {
-            std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!";
+            std::cout << "ERROR::FRAMEBUFFER:: Framebuffer cascade is not complete!";
         }
+        */
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }

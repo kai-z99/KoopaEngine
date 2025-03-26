@@ -396,16 +396,30 @@ void Renderer::RenderCascadedShadowMap()
     this->cascadeShadowShader->use();
 
     std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
-    std::cout << lightSpaceMatrices.size() << '\n';
 
     for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
     {   
         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+        {
+            std::cout << "glFramebufferTextureLayer error on cascade " << i << ": " << err << '\n';
+        }
+
         glClear(GL_DEPTH_BUFFER_BIT);
+        
+        int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            std::cout << "ERROR::FRAMEBUFFER:: Cascade Framebuffer is not complete!" << i << '\n';
+        }
+        
+        std::cout << "END\n\n";
 
         //send uniform
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
+        //TODO: TEST PUTTING IN THE CAMERA SPACE MATRIX HERE
        
         //note: model matrix is sent in d->Render()
         for (DrawCall* d : this->drawCalls)
@@ -415,6 +429,8 @@ void Renderer::RenderCascadedShadowMap()
             d->SetCulling(true);
         }
     }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 }
 
@@ -709,7 +725,7 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
 
-    FramebufferSetup::SetupCascadedShadowMapTextures(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
+    FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
         this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, this->cascadeLevels.size() + 1);
 
     //Point shadows: one FBO, many textures
