@@ -483,7 +483,7 @@ namespace FramebufferSetup
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, unsigned int numCascades)
+    void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, int numCascades)
     {
         //create fb
         glGenFramebuffers(1, &FBO);

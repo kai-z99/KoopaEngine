@@ -60,12 +60,16 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->blurShader->ID, "brightScene"), 0); //GL_TEXTIRE0
     //horizontal is set in BlurBrightScene()
     
+    
+
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
     //Cascade shadow shader
     this->cascadeShadowShader = new Shader(ShaderSources::vsCascadedShadow, ShaderSources::fsCascadedShadow);
     //point shadow shader
     this->pointShadowShader = new Shader(ShaderSources::vsPointShadow, ShaderSources::fsPointShadow);
+
+    
 
     //skybox shader
     this->skyShader = new Shader(ShaderSources::vsSkybox, ShaderSources::fsSkybox);
@@ -76,18 +80,26 @@ Renderer::Renderer()
     this->InitializeDirLight();
     this->currentFramePointLightCount = 0;
 
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR)
+    {
+        std::cout << "glFramebufferTextureLayer error on efwcascade " << ": " << err << '\n';
+    }
+
     //Draw call vector
     this->drawCalls = {};
 
-    //framebuffers/textures
-    //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
-    this->SetupFramebuffers();
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
 
     this->usingSkybox = false;
 
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
+    
+    //framebuffers/textures
+    //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
+    this->SetupFramebuffers();
+
 }
 
 Renderer::~Renderer()
@@ -116,6 +128,8 @@ void Renderer::EndRenderFrame()
     //RENDER SHADOW MAPS---
     //dir
     if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
+
+    
     this->RenderCascadedShadowMap();
     //point
     for (int i = 0; i < currentFramePointLightCount; i++)
@@ -136,6 +150,7 @@ void Renderer::EndRenderFrame()
         glActiveTexture(GL_TEXTURE3 + i); //pointshadowmap is 3-6
         glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointLights[i].shadowMapTexture);
     }
+    //bind cascade textures
 
     //DRAW INTO FINAL IMAGE---
     //bind FBO
@@ -357,7 +372,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     }
 
     //Pull in near plane, push out far plane 
-    float zMult = 10.0f;
+    float zMult = 5.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
 
@@ -400,26 +415,11 @@ void Renderer::RenderCascadedShadowMap()
     for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
     {   
         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-        {
-            std::cout << "glFramebufferTextureLayer error on cascade " << i << ": " << err << '\n';
-        }
-
         glClear(GL_DEPTH_BUFFER_BIT);
-        
-        int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE)
-        {
-            std::cout << "ERROR::FRAMEBUFFER:: Cascade Framebuffer is not complete!" << i << '\n';
-        }
-        
-        std::cout << "END\n\n";
 
         //send uniform
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
-        //TODO: TEST PUTTING IN THE CAMERA SPACE MATRIX HERE
        
         //note: model matrix is sent in d->Render()
         for (DrawCall* d : this->drawCalls)
@@ -432,6 +432,43 @@ void Renderer::RenderCascadedShadowMap()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+}
+
+void Renderer::RenderCascadedShadowMapGeo()
+{
+    this->cascadeShadowShader->use();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, this->cascadeShadowMapFBO); //texture array is attached
+    glViewport(0, 0, CASCADE_SHADOW_WIDTH, CASCADE_SHADOW_HEIGHT);
+    
+    std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
+
+    for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
+    {
+        std::string m = "lightSpaceMatrices[" + std::to_string(i) + "]";
+        glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, m.c_str()), 1,
+            false, glm::value_ptr(lightSpaceMatrices[i]));
+    }
+
+    glCullFace(GL_FRONT);  // peter panning
+
+    
+    int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "ERROR::FRAMEBUFFER:: Cascade Framebuffer is not complete!" << '\n';
+    }
+    
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    for (DrawCall* d : this->drawCalls)
+    {
+        d->SetCulling(false);
+        d->Render(this->cascadeShadowShader);
+    }
+
+    glCullFace(GL_BACK);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::RenderPointShadowMap(unsigned int index)

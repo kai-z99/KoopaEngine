@@ -120,6 +120,7 @@ private:
     glm::mat4 CalculateLightSpaceCascadeMatrix(float near, float far);
     std::vector<glm::mat4> GetCascadeMatrices();
     void RenderCascadedShadowMap();
+    void RenderCascadedShadowMapGeo();
     //point
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
     void RenderPointShadowMap(unsigned int index);

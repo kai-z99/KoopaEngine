@@ -3,7 +3,7 @@
     namespace ShaderSources
     {
         const char* vs1 = R"(
-        #version 330 core
+        #version 410 core
         layout (location = 0) in vec3 aPos;
         layout (location = 1) in vec3 aNormal;
         layout (location = 2) in vec2 aTexCoords;
@@ -40,7 +40,7 @@
         )";
 
         const char* fs1 = R"(
-        #version 330 core
+        #version 410 core
         layout (location = 0) out vec4 FragColor; //COLOR_ATTACHMENT_0
         layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
@@ -279,7 +279,7 @@
         )";
 
         const char* fsLight = R"(
-        #version 330 core
+        #version 410 core
         layout (location = 0) out vec4 FragColor; //COLOR_ATTACHEMNT0
         layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHEMNT1
         
@@ -297,7 +297,7 @@
         )";
 
         const char* vsScreenQuad = R"(
-        #version 330 core
+        #version 410 core
         layout (location = 0) in vec2 aPos;
         layout (location = 1) in vec2 aTexCoords;
 
@@ -311,7 +311,7 @@
         )";
 
         const char* fsScreenQuad = R"(
-        #version 330 core
+        #version 410 core
         out vec4 FragColor;
   
         in vec2 TexCoords;
@@ -369,7 +369,7 @@
         )";
 
         const char* fsBlur = R"(
-        #version 330 core
+        #version 410 core
         out vec4 FragColor;
         
         in vec2 TexCoords;
@@ -412,7 +412,7 @@
         )";
 
         const char* vsDirShadow = R"(
-        #version 330 core
+        #version 410 core
 
         layout (location = 0) in vec3 aPos;
 
@@ -427,7 +427,7 @@
         )";
 
         const char* fsDirShadow = R"(
-        #version 330 core
+        #version 410 core
 
         void main()
         {
@@ -436,12 +436,12 @@
         )";
 
         const char* vsCascadedShadow = R"(
-        #version 330 core
+        #version 410 core
 
         layout (location = 0) in vec3 aPos;
 
-        uniform mat4 lightSpaceMatrix; //view and projection combined
         uniform mat4 model;
+        uniform mat4 lightSpaceMatrix;
 
         //This vertex shader simply converts a fragment to light space. Nothing else
         void main()
@@ -451,16 +451,37 @@
         )";
 
         const char* fsCascadedShadow = R"(
-        #version 330 core
+        #version 410 core
 
         void main()
         {
-	        gl_FragDepth = gl_FragCoord.z; //set depth buffer manually if we want (this is done auto though so who cares...)
+	       // gl_FragDepth = gl_FragCoord.z; //set depth buffer manually if we want (this is done auto though so who cares...)
         }
         )";
 
+        const char* gsCascadedShadow = R"(
+        #version 410 core
+
+        layout(triangles, invocations = 5) in;
+        layout(triangle_strip, max_vertices = 3) out;
+    
+        uniform mat4 lightSpaceMatrices[5];
+
+        void main()
+        {          
+            for (int i = 0; i < 3; ++i)
+            {
+                gl_Position = 
+                    lightSpaceMatrices[gl_InvocationID] * gl_in[i].gl_Position;
+                gl_Layer = gl_InvocationID;
+                EmitVertex();
+            }
+            EndPrimitive();
+        } 
+        )";
+
         const char* vsPointShadow = R"(
-        #version 330 core
+        #version 410 core
 
         layout (location = 0) in vec3 aPos;
 
@@ -477,7 +498,7 @@
         )";
 
         const char* fsPointShadow = R"(
-        #version 330 core
+        #version 410 core
 
         in vec3 FragPos;
 
@@ -497,7 +518,7 @@
         )";
 
         const char* vsSkybox = R"(
-        #version 330 core
+        #version 410 core
     
         layout (location = 0) in vec3 aPos;
     
@@ -516,7 +537,7 @@
         )";
 
         const char* fsSkybox = R"(
-        #version 330 core
+        #version 410 core
         layout (location = 0) out vec4 FragColor;
 
         in vec3 TexCoords;
