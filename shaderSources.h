@@ -209,8 +209,8 @@
             float fragDepth = projCoords.z;
             if (fragDepth > 1.0f) return 0.0f;
             
-            //BIAS
-            float bias = max(0.0031 * (1.0 - dot(normal, lightDir)), 0.00031); //more bias with more angle.
+            //BIAS (0.00035 is optimal, no culling)
+            float bias = max(0.0035 * (1.0 - dot(normal, lightDir)), 0.00035); //more bias with more angle.
             if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
             else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 

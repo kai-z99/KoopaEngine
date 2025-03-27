@@ -372,13 +372,12 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     
 
     //Pull in near plane, push out far plane
-    
     float zMult = 10.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
     
     float offsetNear = 0.0f;
-    float offsetFar = 3.0f;
+    float offsetFar = 3.0f; //fixes bug where shadow disappears if your too close.
 
     minZ -= offsetNear;
     maxZ += offsetFar;
