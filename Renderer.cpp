@@ -22,6 +22,13 @@ Renderer::Renderer()
     //Static setup
 	this->SetupVertexBuffers();
     
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
+    this->drawCalls = {};
+    this->usingSkybox = false;
+    this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+    //SHADERS-------------------------------------------------
+
     //Main lighting shader
     this->lightingShader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->lightingShader->use();
@@ -40,8 +47,13 @@ Renderer::Renderer()
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, uniformName.c_str()), 3 + i);
     }
     //GL_TEXTURE[3-6] have been used.
-     
-    //Check DrawCall.BindTextureProperties
+    //Stuff for cascade shadows
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
+    for (int i = 0; i < this->cascadeLevels.size(); i++)
+    {
+        std::string l = "cascadeDistances[" + std::to_string(i) + "]";
+        glUniform1f(glGetUniformLocation(this->lightingShader->ID, l.c_str()), this->cascadeLevels[i]);
+    }
 
     //Debug lighting shader
     this->debugLightShader = new Shader(ShaderSources::vs1, ShaderSources::fsLight);
@@ -60,8 +72,6 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->blurShader->ID, "brightScene"), 0); //GL_TEXTIRE0
     //horizontal is set in BlurBrightScene()
     
-    
-
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
     //Cascade shadow shader
@@ -69,11 +79,11 @@ Renderer::Renderer()
     //point shadow shader
     this->pointShadowShader = new Shader(ShaderSources::vsPointShadow, ShaderSources::fsPointShadow);
 
-    
-
     //skybox shader
     this->skyShader = new Shader(ShaderSources::vsSkybox, ShaderSources::fsSkybox);
     glUniform1i(glGetUniformLocation(this->skyShader->ID, "skyboxTexture"), 0); //GL_TEXTURE0
+
+    //LIGHTING-------------------------------------------------
 
     //Initialialize lighting
     this->InitializePointLights();
@@ -85,21 +95,11 @@ Renderer::Renderer()
     {
         std::cout << "glFramebufferTextureLayer error on efwcascade " << ": " << err << '\n';
     }
-
-    //Draw call vector
-    this->drawCalls = {};
-
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
-
-    this->usingSkybox = false;
-
-    this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
-
     
-    //framebuffers/textures
+    //FBOs AND TEXTURES-------------------------------------------------
+ 
     //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
     this->SetupFramebuffers();
-
 }
 
 Renderer::~Renderer()
@@ -298,7 +298,7 @@ void Renderer::RenderDirShadowMap()
 
     //Send it!
     this->lightingShader->use();
-    glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "dirLightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
 
     this->dirShadowShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->dirShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
@@ -417,17 +417,25 @@ void Renderer::RenderCascadedShadowMap()
         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        //send uniform
+        //send lightspace matrix to lighting shader's array for later use
+        this->lightingShader->use();
+        std::string l = "cascadeLightSpaceMatrices[" + std::to_string(i) + "]";
+        glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, l.c_str()), 1,
+            false, glm::value_ptr(lightSpaceMatrices[i]));
+
+        //send lightspace matrix to cascade vertex shader for current use
+        this->cascadeShadowShader->use();
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
        
         //note: model matrix is sent in d->Render()
+        glCullFace(GL_FRONT);
         for (DrawCall* d : this->drawCalls)
         {
             d->SetCulling(false);
             d->Render(this->cascadeShadowShader);
-            d->SetCulling(true);
         }
+        glCullFace(GL_BACK);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

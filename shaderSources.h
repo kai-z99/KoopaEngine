@@ -8,17 +8,19 @@
         layout (location = 1) in vec3 aNormal;
         layout (location = 2) in vec2 aTexCoords;
         layout (location = 3) in vec3 aTangent;
-    
+        
+        //UNIFORMS ------------------------------------------------------------------------------------
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
-        uniform mat4 lightSpaceMatrix;
+        uniform mat4 dirLightSpaceMatrix;
 
+        //OUT VARIABLES--------------------------------------------------------------------------------
         out vec2 TexCoords;
         out vec3 FragPos; //Frag pos in world position
         out vec3 Normal;
         out mat3 TBN; //TangentSpace -> WorldSpace
-        out vec4 FragPosLightSpace;
+        out vec4 FragPosDirLightSpace;
 
         void main()
         {
@@ -35,13 +37,13 @@
 
             Normal = N;
 
-            FragPosLightSpace = lightSpaceMatrix * model * vec4(aPos, 1.0);
+            FragPosDirLightSpace = dirLightSpaceMatrix * model * vec4(aPos, 1.0);
         }
         )";
 
         const char* fs1 = R"(
         #version 410 core
-        layout (location = 0) out vec4 FragColor; //COLOR_ATTACHMENT_0
+        layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
         layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
         struct PointLight {    
@@ -67,26 +69,38 @@
         vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
         uniform DirLight dirLight;
     
-        float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
+        float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
+        float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir);
         float PointShadowCalculation(vec3 fragPos, vec3 lightPos, samplerCube map);
-
+        
+        //IN VARIABLES------------------------------------------------------------------------------------
         in vec2 TexCoords;
         in vec3 Normal;
         in vec3 FragPos;
         in mat3 TBN;
-        in vec4 FragPosLightSpace;
-
+        in vec4 FragPosDirLightSpace;
+        
+        //UNIFORMS------------------------------------------------------------------------------------
+        //material
         uniform sampler2D currentDiffuse;         //0
         uniform sampler2D currentNormalMap;       //1
+
+        //shadowmaps
         uniform sampler2D dirShadowMap;           //2
         uniform samplerCube pointShadowMaps[4];   //3
         uniform sampler2DArray cascadeShadowMaps; //4
+        uniform float cascadeDistances[4];        //compile time
+        uniform int cascadeCount;                 //compile time
+        uniform mat4 cascadeLightSpaceMatrices[5];       //runtime
+
+
+        //params/data
         uniform float farPlane; //for point shadow calculation
         uniform vec3 baseColor; //Use this if not using a diffuse texture
         uniform vec3 viewPos;
-
         uniform bool usingNormalMap;
         uniform bool usingDiffuseMap;
+        uniform mat4 view;
 
         void main()
         {
@@ -120,7 +134,7 @@
             else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
         }
     
-        float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
+        float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
         {
             //note: we only care about z comp of fragPosLightSpace.
             vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //perspective divide to convert to [-1,1]. 
@@ -137,7 +151,7 @@
 
             if (fragDepth > 1.0f) return 0.0f; //Outside the far plane
 
-            float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.005); //more bias with more angle.
+            float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.00125); //more bias with more angle.
             float shadow = 0.0f;
 
             //PCF---
@@ -162,7 +176,6 @@
             return shadow;  
         }
         
-
         const vec3 sampleOffsetDirections[20] = vec3[]
         (
            vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
@@ -171,7 +184,57 @@
            vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
            vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
         );  
+
+        float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir)
+        {
+            vec4 fragPosView = view * vec4(fragPos, 1.0f);
+            float depth = abs(fragPosView.z);
+            
+            int layer = -1;
+            for (int i = 0; i < cascadeCount; i++)
+            {
+                if (depth < cascadeDistances[i])
+                {
+                    layer = i;
+                    break;
+                }
+            }
+            if (layer == -1) layer = cascadeCount;
+        
+            vec4 fragPosLightSpace = cascadeLightSpaceMatrices[layer] * vec4(fragPos, 1.0f);
+
+            vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //bring to [-1,1] (if in frustum)
+            projCoords = projCoords * 0.5f + 0.5f; //bring to [0,1]
+
+            float fragDepth = projCoords.z;
+            if (fragDepth > 1.0f) return 0.0f;
+            
+            //BIAS
+            float bias = max(0.006 * (1.0 - dot(normal, lightDir)), 0.0006); //more bias with more angle.
+            if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
+            else bias *= 1 / (cascadeDistances[layer] * 0.5f);
+
+            float shadow = 0.0f;
+
+            //PCF---
+            vec2 texelSize = 1.0f / vec2(textureSize(cascadeShadowMaps, 0));
     
+            //This is like a convolution matrix.
+            for(int x = -1; x <= 1; ++x)
+            {
+                for(int y = -1; y <= 1; ++y)
+                {
+                    float pcfDepth = texture(cascadeShadowMaps, vec3(projCoords.xy + vec2(x, y) * texelSize, layer)).r;
+                    shadow += fragDepth - bias > pcfDepth ? 1.0 : 0.0;  
+                }    
+            }
+            shadow /= 9.0;
+    
+            //shadow = fragDepth - bias > closestDepth ? 1.0f : 0.0f;
+
+            return shadow;  
+        }
+
         float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, samplerCube map)
         {
             vec3 lightToFrag = fragPos - lightPos;
@@ -203,6 +266,8 @@
 
             return shadow;
         }
+
+        
 
         vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, int index)
         {
@@ -272,7 +337,8 @@
             }
             else
             {
-                float shadow = ShadowCalculation(FragPosLightSpace, normal, -direction);
+                //float shadow = DirShadowCalculation(FragPosDirLightSpace, normal, -direction);
+                float shadow = CascadeShadowCalculation(FragPos, normal, -direction);
                 return (1.0 - shadow) * (diffuse + specular);
             }
         }
