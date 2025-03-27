@@ -127,10 +127,8 @@ void Renderer::EndRenderFrame()
 {
     //RENDER SHADOW MAPS---
     //dir
-    if (this->dirLight.castShadows) this->RenderDirShadowMap(); //Sets active FB to the shadow one in function
+    if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
-    
-    this->RenderCascadedShadowMap();
     //point
     for (int i = 0; i < currentFramePointLightCount; i++)
     {
@@ -371,11 +369,20 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
         maxZ = std::max(maxZ, cLightSpace.z);
     }
 
-    //Pull in near plane, push out far plane 
-    float zMult = 5.0f;
+    
+
+    //Pull in near plane, push out far plane
+    
+    float zMult = 10.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
+    
+    float offsetNear = 0.0f;
+    float offsetFar = 3.0f;
 
+    minZ -= offsetNear;
+    maxZ += offsetFar;
+    
     glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
 
     return lightProjection * lightView;
@@ -411,7 +418,7 @@ void Renderer::RenderCascadedShadowMap()
     this->cascadeShadowShader->use();
 
     std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
-
+                
     for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
     {   
         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
@@ -458,9 +465,6 @@ void Renderer::RenderCascadedShadowMapGeo()
             false, glm::value_ptr(lightSpaceMatrices[i]));
     }
 
-    glCullFace(GL_FRONT);  // peter panning
-
-    
     int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -469,6 +473,7 @@ void Renderer::RenderCascadedShadowMapGeo()
     
     glClear(GL_DEPTH_BUFFER_BIT);
 
+    glCullFace(GL_FRONT);  // peter panning
     for (DrawCall* d : this->drawCalls)
     {
         d->SetCulling(false);

@@ -200,17 +200,17 @@
                 }
             }
             if (layer == -1) layer = cascadeCount;
-        
+            
             vec4 fragPosLightSpace = cascadeLightSpaceMatrices[layer] * vec4(fragPos, 1.0f);
 
             vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //bring to [-1,1] (if in frustum)
             projCoords = projCoords * 0.5f + 0.5f; //bring to [0,1]
-
+                
             float fragDepth = projCoords.z;
             if (fragDepth > 1.0f) return 0.0f;
             
             //BIAS
-            float bias = max(0.006 * (1.0 - dot(normal, lightDir)), 0.0006); //more bias with more angle.
+            float bias = max(0.0031 * (1.0 - dot(normal, lightDir)), 0.00031); //more bias with more angle.
             if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
             else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
