@@ -21,8 +21,8 @@ Renderer::Renderer()
 
     //Static setup
 	this->SetupVertexBuffers();
-    
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 2.0f };
+    //                              2               4                      10                  25
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 3.0f };
     this->drawCalls = {};
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -39,7 +39,6 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
 
-    //glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMap"), 3);   //GL_TEXTURE3
     // Bind each point shadow cubemap to a consecutive texture unit starting from GL_TEXTURE3
     for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++) 
     {
@@ -47,7 +46,10 @@ Renderer::Renderer()
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, uniformName.c_str()), 3 + i);
     }
     //GL_TEXTURE[3-6] have been used.
+    // 
+    // 
     //Stuff for cascade shadows
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 7); //GL_TEXTURE7
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
@@ -149,6 +151,8 @@ void Renderer::EndRenderFrame()
         glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointLights[i].shadowMapTexture);
     }
     //bind cascade textures
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
 
     //DRAW INTO FINAL IMAGE---
     //bind FBO
@@ -435,7 +439,7 @@ void Renderer::RenderCascadedShadowMap()
             false, glm::value_ptr(lightSpaceMatrices[i]));
        
         //note: model matrix is sent in d->Render()
-        glCullFace(GL_FRONT);
+        //glCullFace(GL_FRONT);
         for (DrawCall* d : this->drawCalls)
         {
             d->SetCulling(false);

@@ -1,18 +1,11 @@
-        #version 410 core
+#version 410 core
+layout (location = 0) out vec4 FragColor;
 
-        layout(triangles, invocations = 5) in;
-        layout(triangle_strip, max_vertices = 3) out;
-    
-        uniform mat4 lightSpaceMatrices[5];
+in vec3 TexCoords;
 
-        void main()
-        {          
-            for (int i = 0; i < 3; ++i)
-            {
-                gl_Position = 
-                    lightSpaceMatrices[gl_InvocationID] * gl_in[i].gl_Position;
-                gl_Layer = gl_InvocationID;
-                EmitVertex();
-            }
-            EndPrimitive();
-        } 
+uniform samplerCube skyboxTexture;
+
+void main()
+{
+	FragColor = texture(skyboxTexture, TexCoords);
+}

@@ -87,12 +87,21 @@
 
         //shadowmaps
         uniform sampler2D dirShadowMap;           //2
-        uniform samplerCube pointShadowMaps[4];   //3
-        uniform sampler2DArray cascadeShadowMaps; //4
+        uniform samplerCube pointShadowMaps[4];   //3-6
+        uniform sampler2DArray cascadeShadowMaps; //7
         uniform float cascadeDistances[4];        //compile time
         uniform int cascadeCount;                 //compile time
         uniform mat4 cascadeLightSpaceMatrices[5];       //runtime
 
+        //mesh
+        /*
+        uniform sampler2D texture_diffuse1;     //8
+        uniform sampler2D texture_specular1;    //9
+        uniform sampler2D texture_normal1;      //10
+        uniform sampler2D texture_diffuse2;     //11
+        uniform sampler2D texture_specular2;    //12
+        uniform sampler2D texture_normal2;      //13
+        */
 
         //params/data
         uniform float farPlane; //for point shadow calculation
@@ -602,6 +611,7 @@
         }  
         )";
 
+        
         const char* fsSkybox = R"(
         #version 410 core
         layout (location = 0) out vec4 FragColor;
@@ -615,4 +625,9 @@
 	        FragColor = texture(skyboxTexture, TexCoords);
         }
         )";
+        
+
+        //const char fsSkybox[] = {
+        //#include "fs1.glsl"
+        //};
     }
