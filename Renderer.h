@@ -77,8 +77,6 @@ private:
         bool isActive;
         bool castShadows;
 
-        unsigned int shadowMapTexture;
-
         PointLight()
             : position(0.0f), color(1.0f), intensity(1.0f), isActive(false), castShadows(false) {}
 
@@ -148,6 +146,5 @@ private:
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
-    unsigned int pointShadowMapFBO; //cube map texture is in point light struct
-
+    unsigned int pointShadowMapFBO, pointShadowMapTextureArrayDepth; 
 };

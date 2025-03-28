@@ -71,7 +71,7 @@
     
         float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
         float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir);
-        float PointShadowCalculation(vec3 fragPos, vec3 lightPos, samplerCube map);
+        float PointShadowCalculation(vec3 fragPos, vec3 lightPos, int index);
         
         //IN VARIABLES------------------------------------------------------------------------------------
         in vec2 TexCoords;
@@ -87,12 +87,12 @@
 
         //shadowmaps
         uniform sampler2D dirShadowMap;           //2
-        uniform samplerCube pointShadowMaps[4];   //3-6
-        uniform sampler2DArray cascadeShadowMaps; //7
+        uniform samplerCubeArray pointShadowMapArray; //3
+        uniform sampler2DArray cascadeShadowMaps; //4
         uniform float cascadeDistances[4];        //compile time
         uniform int cascadeCount;                 //compile time
         uniform mat4 cascadeLightSpaceMatrices[5];       //runtime
-
+ 
         //mesh
         /*
         uniform sampler2D texture_diffuse1;     //8
@@ -244,12 +244,12 @@
             return shadow;  
         }
 
-        float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, samplerCube map)
+        float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, int index)
         {
             vec3 lightToFrag = fragPos - lightPos;
 
             float fragDepth = length(lightToFrag); // [0, farPlane]
-            float closestDepth = texture(map, lightToFrag).r;// [0,1]
+            float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag, index)).r;// [0,1]
             closestDepth *= farPlane; //[0,1] -> [0, farPlane]
         
             float shadow = 0.0f;
@@ -262,7 +262,7 @@
     
             for(int i = 0; i < samples; ++i)
             {
-                float closestDepth = texture(map, lightToFrag + sampleOffsetDirections[i] * diskRadius).r;
+                float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag + sampleOffsetDirections[i] * diskRadius, index)).r;
                 closestDepth *= farPlane;   // move to [0, farPlane]
 
                 if (fragDepth - bias > closestDepth) shadow += 1.0;
@@ -313,7 +313,7 @@
             }
             else
             {
-                float shadow = PointShadowCalculation(fragPos, light.position, normal, pointShadowMaps[index]);
+                float shadow = PointShadowCalculation(fragPos, light.position, normal, index);
                 return (1.0f - shadow) * (diffuse + specular);
             }
         } 

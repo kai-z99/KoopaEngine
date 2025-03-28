@@ -25,7 +25,7 @@ namespace FramebufferSetup
 
 namespace TextureSetup
 {
-    void SetupPointShadowMapTexture(unsigned int& texture, unsigned int w, unsigned int h);
+    void SetupPointShadowMapTextureArray(unsigned int& textureArray, unsigned int w, unsigned int h);
     unsigned int LoadTexture(char const* path);
     unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
 }

@@ -38,18 +38,10 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
-
-    // Bind each point shadow cubemap to a consecutive texture unit starting from GL_TEXTURE3
-    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++) 
-    {
-        std::string uniformName = "pointShadowMaps[" + std::to_string(i) + "]";
-        glUniform1i(glGetUniformLocation(this->lightingShader->ID, uniformName.c_str()), 3 + i);
-    }
-    //GL_TEXTURE[3-6] have been used.
-    // 
-    // 
+    //point shadow maps
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 7); //GL_TEXTURE7
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); //GL_TEXTURE7
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
@@ -142,16 +134,13 @@ void Renderer::EndRenderFrame()
         
     //BIND SHADOWMAP TEXTURES---
     //dir
-    glActiveTexture(GL_TEXTURE2); //dirshadowmap is 2
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth); //global binding, not related to shader so cant do it in contructor.
     //point
-    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
-    {
-        glActiveTexture(GL_TEXTURE3 + i); //pointshadowmap is 3-6
-        glBindTexture(GL_TEXTURE_CUBE_MAP, this->pointLights[i].shadowMapTexture);
-    }
-    //bind cascade textures
-    glActiveTexture(GL_TEXTURE7);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
+    //cascade
+    glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
 
     //DRAW INTO FINAL IMAGE---
@@ -524,7 +513,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     {
         GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
         //set output texture (the thing being poured into) (render target)
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, face, this->pointLights[index].shadowMapTexture, 0);
+        //set the face from the cube texture array
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->pointShadowMapTextureArrayDepth, 0, index * 6 + i);
         glUniformMatrix4fv(glGetUniformLocation(this->pointShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowTransforms[i]));
 
         //clear the currently bound attachment's depth buffer
@@ -781,12 +771,9 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
         this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, this->cascadeLevels.size() + 1);
 
-    //Point shadows: one FBO, many textures
+    //Point shadows
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
-    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
-    {
-        TextureSetup::SetupPointShadowMapTexture(pointLights[i].shadowMapTexture, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
-    }
+    TextureSetup::SetupPointShadowMapTextureArray(this->pointShadowMapTextureArrayDepth, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
 }
 
 void Renderer::SetupVertexBuffers()
