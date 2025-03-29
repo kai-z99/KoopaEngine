@@ -55,6 +55,14 @@ public:
         Vec4 rotation = { 0,1,0,0 }
     );
 
+    void DrawModel
+    (
+        const char* path,
+        Vec3 pos = {0,0,0},
+        Vec3 size = {0,0,0},
+        Vec4 rotation = {0,1,0,0}
+    );
+
     void DrawPointLight
     (
         Vec3 pos = {0,0,0},

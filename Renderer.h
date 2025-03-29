@@ -8,6 +8,7 @@
 class Shader;
 class DrawCall;
 class Camera;
+class Model;
 
 class Renderer
 {
@@ -31,6 +32,7 @@ public:
     void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation);
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
+    void DrawModel(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
     void SetCurrentDiffuse(const char* path);
@@ -60,10 +62,12 @@ private:
     unsigned int currentNormalMapTexture;
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
-    //skybox
     unsigned int currentSkyboxTexture;
     bool usingSkybox;
     void DrawSkybox();
+
+    //MODEL
+    std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
 
     //LIGHTING
     void SetAndSendAllLightsToFalse();

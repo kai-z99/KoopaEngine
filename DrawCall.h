@@ -4,11 +4,13 @@
 #include "KoopaMath.h"
 
 class Shader;
+class Model;
 
 class DrawCall
 {
 public:
 	DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model);
+	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
 	void Render(Shader* shader);
@@ -26,7 +28,7 @@ private:
 	//General data
 	unsigned int VAO;
 	unsigned int vertexCount;
-	glm::mat4 model;
+	glm::mat4 modelMatrix;
 
 	//For "fs1" lighting shader
 	bool usingDiffuseMap;
@@ -34,10 +36,10 @@ private:
 	unsigned int diffuseMapTexture;
 	Vec3 diffuseColor;
 	unsigned int normalMapTexture;
-	unsigned int dirShadowMapTexture;
 
 	//General flags
 	bool usingCulling;
 
-	
+	//Drawing a predefined model?
+	Model* model;
 };

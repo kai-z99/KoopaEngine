@@ -73,64 +73,81 @@
         float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir);
         float PointShadowCalculation(vec3 fragPos, vec3 lightPos, int index);
         
-        //IN VARIABLES------------------------------------------------------------------------------------
+        //IN VARIABLES--------------------------------------------------------------------------------
         in vec2 TexCoords;
         in vec3 Normal;
         in vec3 FragPos;
         in mat3 TBN;
         in vec4 FragPosDirLightSpace;
         
-        //UNIFORMS------------------------------------------------------------------------------------
+        //SAMPLERS------------------------------------------------------------------------------------
         //material
-        uniform sampler2D currentDiffuse;         //0
-        uniform sampler2D currentNormalMap;       //1
-
+        uniform sampler2D currentDiffuse;               //0
+        uniform sampler2D currentNormalMap;             //1
         //shadowmaps
-        uniform sampler2D dirShadowMap;           //2
-        uniform samplerCubeArray pointShadowMapArray; //3
-        uniform sampler2DArray cascadeShadowMaps; //4
-        uniform float cascadeDistances[4];        //compile time
-        uniform int cascadeCount;                 //compile time
-        uniform mat4 cascadeLightSpaceMatrices[5];       //runtime
+        uniform sampler2D dirShadowMap;                 //2
+        uniform samplerCubeArray pointShadowMapArray;   //3
+        uniform sampler2DArray cascadeShadowMaps;       //4
+        //model
+        uniform sampler2D texture_diffuse1;              //5-8
+        uniform sampler2D texture_specular1;             //5-8
+        uniform sampler2D texture_normal1;               //5-8
+        uniform sampler2D texture_height1;               //5-8
+        
+        //UNIFORMS------------------------------------------------------------------------------------
+
+        //cascade
+        uniform float cascadeDistances[4];              //compile time
+        uniform int cascadeCount;                       //compile time
+        uniform mat4 cascadeLightSpaceMatrices[5];      //runtime
  
         //mesh
-        /*
-        uniform sampler2D texture_diffuse1;     //8
-        uniform sampler2D texture_specular1;    //9
-        uniform sampler2D texture_normal1;      //10
-        uniform sampler2D texture_diffuse2;     //11
-        uniform sampler2D texture_specular2;    //12
-        uniform sampler2D texture_normal2;      //13
-        */
 
         //params/data
+        uniform bool usingModel;
+
         uniform float farPlane; //for point shadow calculation
         uniform vec3 baseColor; //Use this if not using a diffuse texture
         uniform vec3 viewPos;
         uniform bool usingNormalMap;
         uniform bool usingDiffuseMap;
         uniform mat4 view;
+        
 
         void main()
         {
-        
             vec3 color = vec3(0.0f);
             vec3 viewDir = normalize(viewPos - FragPos);
             float gamma = 2.2;
             //make sure to convert diffuse to linear space
             vec3 diffuseColor = (usingDiffuseMap) ? pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)) : baseColor;
-    
-            vec3 normalFromData = normalize(Normal);
-            vec3 normalFromMap  = texture(currentNormalMap, TexCoords).rgb;
-            normalFromMap = normalFromMap * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-            normalFromMap = normalize(TBN * normalFromMap); //Tangent -> World (tbn is constucted with model matrix)
-
+            
+            //SET NORMAL
+            vec3 normal;
+            if (usingModel)
+            {
+                normal = texture(texture_normal1, TexCoords).rgb;
+                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+            }
+            else if (usingNormalMap)
+            {
+                normal = texture(currentNormalMap, TexCoords).rgb;
+                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+            }
+            else
+            {
+                normal = normalize(Normal);
+            }
+            
+            //LIGHTS
             for (int i = 0; i < numPointLights; i++)
             {
-                color += CalcPointLight(pointLights[i], (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir, diffuseColor, i);
+                color += CalcPointLight(pointLights[i], normal, FragPos, viewDir, diffuseColor, i);
             }
 
-            color += CalcDirLight(dirLight, (usingNormalMap) ? normalFromMap : normalFromData, FragPos, viewDir, diffuseColor);
+            color += CalcDirLight(dirLight, normal, FragPos, viewDir, diffuseColor);
     
             //Ambient lighting
             vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuseColor; 

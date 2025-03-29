@@ -10,6 +10,7 @@
 #include "DrawCall.h"
 #include "Setup.h"
 #include "Camera.h"
+#include "Model.h"
 
 
 #include <iostream>
@@ -34,14 +35,14 @@ Renderer::Renderer()
     this->lightingShader->use();
     this->currentDiffuseTexture = TextureSetup::LoadTexture("../ShareLib/Resources/wood.png");
     this->currentNormalMapTexture = TextureSetup::LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
-    //Associate
+    //ASSOCIATE TEXTURES----
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
-    //point shadow maps
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
+
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); //GL_TEXTURE7
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
@@ -124,7 +125,7 @@ void Renderer::EndRenderFrame()
     if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
     //point
-    for (int i = 0; i < currentFramePointLightCount; i++)
+    for (unsigned int i = 0; i < currentFramePointLightCount; i++)
     {
         if (this->pointLights[i].castShadows)
         {
@@ -614,6 +615,16 @@ void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
     this->drawCalls.push_back(new DrawCall(this->sphereVAO, SPHERE_X_SEGMENTS * SPHERE_Y_SEGMENTS * 6, model));
 }
 
+void Renderer::DrawModel(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
+{
+    auto it = this->pathToModel.find(path);
+
+    if (it == this->pathToModel.end())
+    {
+        this->pathToModel[path] = new Model(path);
+    }
+}
+
 void Renderer::DrawLightsDebug()
 {
     this->debugLightShader->use();
@@ -769,7 +780,7 @@ void Renderer::SetupFramebuffers()
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
 
     FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
-        this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, this->cascadeLevels.size() + 1);
+        this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, (int)this->cascadeLevels.size() + 1);
 
     //Point shadows
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);

@@ -2,13 +2,17 @@
 #include "DrawCall.h"
 #include "Shader.h"
 #include "Constants.h"
+#include "Model.h"
+
 
 DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model)
 {
+    this->model = nullptr;
+
     //general data
     this->VAO = VAO;
     this->vertexCount = vertexCount;
-    this->model = model;
+    this->modelMatrix = model;
 
     //general flags
     this->usingCulling = true;
@@ -21,15 +25,26 @@ DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& 
     this->diffuseColor = noTexturePink; //missingTexture color
 }
 
+DrawCall::DrawCall(Model* m, const glm::mat4 model)
+{
+    this->model = m;
+}
+
 void DrawCall::Render(Shader* shader)
 {
-    shader->use();
-    
     if (usingCulling) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
 
+    if (this->model != nullptr)
+    {
+        this->model->Draw(*shader);
+        return;
+    }
+        
+    shader->use();
+    
     glBindVertexArray(VAO);
-    glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->model));
+    glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
     glDrawArrays(GL_TRIANGLES, 0, this->vertexCount);
 
     glEnable(GL_CULL_FACE);
@@ -39,6 +54,16 @@ void DrawCall::Render(Shader* shader)
 void DrawCall::BindTextureProperties(Shader* shader)
 {
     shader->use();
+
+    if (this->model != nullptr)
+    {
+        glUniform1i(glGetUniformLocation(shader->ID, "usingModel"), 1);
+        return; //Model has its own version of the stuff below.
+    }
+    else
+    {
+        glUniform1i(glGetUniformLocation(shader->ID, "usingModel"), 0);
+    }
 
     //TEXTURE0: DIFFUSEMAP------------------------------------------------------------------------
     glActiveTexture(GL_TEXTURE0);
