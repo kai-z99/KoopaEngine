@@ -8,6 +8,7 @@
         layout (location = 1) in vec3 aNormal;
         layout (location = 2) in vec2 aTexCoords;
         layout (location = 3) in vec3 aTangent;
+        layout (location = 4) in vec3 aBitangent;
         
         //UNIFORMS ------------------------------------------------------------------------------------
         uniform mat4 model;
@@ -120,37 +121,53 @@
             vec3 viewDir = normalize(viewPos - FragPos);
             float gamma = 2.2;
             //make sure to convert diffuse to linear space
-            vec3 diffuseColor = (usingDiffuseMap) ? pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma)) : baseColor;
             
-            //SET NORMAL
+            //Find which textures to use
+            vec3 diffuse;
             vec3 normal;
+
             if (usingModel)
             {
+                diffuse = pow(texture(texture_diffuse1, TexCoords).rgb, vec3(gamma));   
+
                 normal = texture(texture_normal1, TexCoords).rgb;
                 normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
                 normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-            }
-            else if (usingNormalMap)
-            {
-                normal = texture(currentNormalMap, TexCoords).rgb;
-                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+                normal = normalize(Normal);
             }
             else
             {
-                normal = normalize(Normal);
+                if (usingDiffuseMap)
+                {
+                    diffuse = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma));
+                }
+                else
+                {
+                    diffuse = baseColor;
+                }
+
+                if (usingNormalMap)
+                {
+                    normal = texture(currentNormalMap, TexCoords).rgb;
+                    normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                    normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+                }
+                else
+                {
+                    normal = normalize(Normal);
+                }                
             }
             
             //LIGHTS
             for (int i = 0; i < numPointLights; i++)
             {
-                color += CalcPointLight(pointLights[i], normal, FragPos, viewDir, diffuseColor, i);
+                color += CalcPointLight(pointLights[i], normal, FragPos, viewDir, diffuse, i);
             }
 
-            color += CalcDirLight(dirLight, normal, FragPos, viewDir, diffuseColor);
+            color += CalcDirLight(dirLight, normal, FragPos, viewDir, diffuse);
     
             //Ambient lighting
-            vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuseColor; 
+            vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse; 
             color += sceneAmbient;
 
             FragColor = vec4(color, 1.0f);
@@ -353,9 +370,8 @@
             spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
 
             // combine results
-    
             vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-            vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
+            vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : 1.0f);
         
             if (!light.castShadows)
             {

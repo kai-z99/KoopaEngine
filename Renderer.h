@@ -32,7 +32,7 @@ public:
     void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation);
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
-    void DrawModel(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
+    void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
     void SetCurrentDiffuse(const char* path);

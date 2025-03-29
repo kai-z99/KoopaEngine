@@ -12,7 +12,6 @@
 #include "Camera.h"
 #include "Model.h"
 
-
 #include <iostream>
 
 Renderer::Renderer()
@@ -607,6 +606,7 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
     this->drawCalls.push_back(new DrawCall(this->planeVAO, 6, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
+    //TODO: How is this not being set to true in the shadow rendering?
 }
 
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
@@ -615,14 +615,22 @@ void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
     this->drawCalls.push_back(new DrawCall(this->sphereVAO, SPHERE_X_SEGMENTS * SPHERE_Y_SEGMENTS * 6, model));
 }
 
-void Renderer::DrawModel(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
+void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)
 {
+    if (flipTexture) stbi_set_flip_vertically_on_load(true);
+
     auto it = this->pathToModel.find(path);
 
     if (it == this->pathToModel.end())
     {
         this->pathToModel[path] = new Model(path);
     }
+    stbi_set_flip_vertically_on_load(false);
+
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
+    this->drawCalls.push_back(new DrawCall(this->pathToModel[path], model));
+
+    stbi_set_flip_vertically_on_load(false);
 }
 
 void Renderer::DrawLightsDebug()

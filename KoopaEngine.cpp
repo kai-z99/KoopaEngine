@@ -138,9 +138,9 @@ void KoopaEngine::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
     this->renderer->DrawSphere(pos, size, rotation);
 }
 
-void KoopaEngine::DrawModel(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
+void KoopaEngine::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)
 {
-    this->renderer->DrawModel(path, pos, size, rotation);
+    this->renderer->DrawModel(path, flipTexture, pos, size, rotation);
 }
 
 void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity, bool shadows)

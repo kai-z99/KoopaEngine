@@ -58,8 +58,9 @@ public:
     void DrawModel
     (
         const char* path,
+        bool flipTexture = false,
         Vec3 pos = {0,0,0},
-        Vec3 size = {0,0,0},
+        Vec3 size = {1,1,1},
         Vec4 rotation = {0,1,0,0}
     );
 

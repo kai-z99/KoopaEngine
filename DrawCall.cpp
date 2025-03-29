@@ -28,28 +28,34 @@ DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& 
 DrawCall::DrawCall(Model* m, const glm::mat4 model)
 {
     this->model = m;
+    this->modelMatrix = model;
 }
 
 void DrawCall::Render(Shader* shader)
 {
+    shader->use();
+
     if (usingCulling) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
+
+    glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
 
     if (this->model != nullptr)
     {
         this->model->Draw(*shader);
-        return;
     }
-        
-    shader->use();
+    else
+    {
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, this->vertexCount);
+    }
     
-    glBindVertexArray(VAO);
-    glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
-    glDrawArrays(GL_TRIANGLES, 0, this->vertexCount);
-
     glEnable(GL_CULL_FACE);
     glBindVertexArray(0);
+    
 }
+
+
 
 void DrawCall::BindTextureProperties(Shader* shader)
 {
