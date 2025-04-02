@@ -23,7 +23,7 @@ enum Camera_Mode
 // Default camera values
 const float YAW = -90.0f; //start facing -z. If you do euler angles calcs for yaw = -90, pitch = 0, you get front = (0, 0, -1) as desired.                                
 const float PITCH = 0.0f;                  //If you do it with yaw = pitch = 0, you get front = (1, 0, 0), facing the x axis.
-const float SPEED = 5.5f;
+const float SPEED = 50.5f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 

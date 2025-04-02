@@ -5,7 +5,7 @@
 #include "Model.h"
 
 
-DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model)
+DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model, GLenum primitive)
 {
     this->model = nullptr;
 
@@ -13,6 +13,7 @@ DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& 
     this->VAO = VAO;
     this->vertexCount = vertexCount;
     this->modelMatrix = model;
+    this->primitive = primitive;
 
     //general flags
     this->usingCulling = true;
@@ -38,6 +39,9 @@ void DrawCall::Render(Shader* shader)
     if (usingCulling) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
 
+    //temp
+    glDisable(GL_CULL_FACE);
+
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
 
     if (this->model != nullptr)
@@ -47,7 +51,7 @@ void DrawCall::Render(Shader* shader)
     else
     {
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, this->vertexCount);
+        glDrawArrays(this->primitive, 0, this->vertexCount);
     }
     
     glEnable(GL_CULL_FACE);
@@ -124,4 +128,9 @@ void DrawCall::SetDiffuseColor(Vec3 col)
 void DrawCall::SetCulling(bool enabled)
 {
     this->usingCulling = enabled;
+}
+
+unsigned int DrawCall::GetVAO()
+{
+    return this->VAO;
 }

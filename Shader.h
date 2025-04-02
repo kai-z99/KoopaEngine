@@ -12,9 +12,10 @@ class Shader
 public:
     unsigned int ID;
 
-    void compileShaders(const char* vShaderCode, const char* fShaderCode, const char* gShaderCode)
+    void compileShaders(const char* vShaderCode, const char* fShaderCode, const char* gShaderCode, 
+        const char* tesConShaderCode, const char* tesEvalShaderCode)
     {
-        unsigned int vertex, fragment, geometry;
+        unsigned int vertex, fragment, geometry, tesControl, tesEval;
         // vertex shader
         vertex = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertex, 1, &vShaderCode, NULL);
@@ -35,11 +36,31 @@ public:
             checkCompileErrors(geometry, "GEOMETRY");
         }
 
+        if (tesConShaderCode)
+        {
+            tesControl = glCreateShader(GL_TESS_CONTROL_SHADER);
+            glShaderSource(tesControl, 1, &tesConShaderCode, NULL);
+            glCompileShader(tesControl);
+            checkCompileErrors(tesControl, "TESS_CONTROL");
+        }
+
+        // Tessellation Evaluation shader (if provided)
+        if (tesEvalShaderCode)
+        {
+            tesEval = glCreateShader(GL_TESS_EVALUATION_SHADER);
+            glShaderSource(tesEval, 1, &tesEvalShaderCode, NULL);
+            glCompileShader(tesEval);
+            checkCompileErrors(tesEval, "TESS_EVALUATION");
+        }
+
         // shader Program
         ID = glCreateProgram();
         glAttachShader(ID, vertex);
         glAttachShader(ID, fragment);
         if (gShaderCode) glAttachShader(ID, geometry);
+        if (tesConShaderCode) glAttachShader(ID, tesControl);
+        if (tesEvalShaderCode) glAttachShader(ID, tesEval);
+
         glLinkProgram(ID);
         checkCompileErrors(ID, "PROGRAM");
 
@@ -47,13 +68,16 @@ public:
         glDeleteShader(vertex);
         glDeleteShader(fragment);
         if (gShaderCode) glDeleteShader(geometry);
+        if (tesConShaderCode) glDeleteShader(tesControl);
+        if (tesEvalShaderCode) glDeleteShader(tesEval);
     }
 
     // constructor generates the shader on the fly
     // ------------------------------------------------------------------------
-    Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr)
+    Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr,
+        const char* tesConPath = nullptr, const char* tesEvalPath = nullptr)
     {
-        compileShaders(vertexPath, fragmentPath, geometryPath);
+        compileShaders(vertexPath, fragmentPath, geometryPath, tesConPath, tesEvalPath);
     }
     // activate the shader
     // ------------------------------------------------------------------------

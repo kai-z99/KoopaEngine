@@ -77,6 +77,10 @@ Renderer::Renderer()
     this->skyShader = new Shader(ShaderSources::vsSkybox, ShaderSources::fsSkybox);
     glUniform1i(glGetUniformLocation(this->skyShader->ID, "skyboxTexture"), 0); //GL_TEXTURE0
 
+    //tesselation for heightmap
+    this->terrainShader = new Shader(ShaderSources::vsTerrain, ShaderSources::fsTerrain, nullptr,
+        ShaderSources::tcsTerrain, ShaderSources::tesTerrain);
+
     //LIGHTING-------------------------------------------------
 
     //Initialialize lighting
@@ -94,6 +98,114 @@ Renderer::Renderer()
  
     //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
     this->SetupFramebuffers();
+
+
+    // load and create a texture
+    // -------------------------
+    glGenTextures(1, &this->heightMapTextureID);
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, this->heightMapTextureID); // all upcoming GL_TEXTURE_2D operations now have effect on this texture object
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load image, create texture and generate mipmaps
+    int width, height, nrChannels;
+    // The FileSystem::getPath(...) is part of the GitHub repository so we can find files on any IDE/platform; replace it with your own image path.
+    unsigned char* data = stbi_load("../ShareLib/Resources/iceland_heightmap.png", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        GLenum format = GL_RGBA; // Assuming RGBA for now
+        if (nrChannels == 1)
+            format = GL_RED;
+        else if (nrChannels == 3)
+            format = GL_RGB;
+        // else format = GL_RGBA; // Default
+
+        // Use the determined format
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            std::cerr << "!!! OpenGL Error after glTexImage2D for heightmap: " << err << std::endl;
+        }
+
+        glGenerateMipmap(GL_TEXTURE_2D);
+        err = glGetError();
+        if (err != GL_NO_ERROR) {
+            std::cerr << "!!! OpenGL Error after glGenerateMipmap for heightmap: " << err << std::endl;
+        }
+
+        // terrainShader should be valid here
+        if (this->terrainShader && this->terrainShader->ID != 0) {
+            this->terrainShader->use(); // Use before setting uniform
+            glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 8); // GL_TEXTURE8
+        }
+        else {
+            std::cerr << "!!! ERROR: Terrain shader invalid before setting heightmap uniform!" << std::endl;
+        }
+    }
+    else // stbi_load failed
+    {
+        std::cout << "Failed to load heightmap texture" << std::endl;
+    }
+    stbi_image_free(data); // Free data regardless of glTexImage2D success
+
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    std::vector<float> vertices;
+
+    unsigned rez = 20;
+    for (unsigned i = 0; i <= rez - 1; i++)
+    {
+        for (unsigned j = 0; j <= rez - 1; j++)
+        {
+            vertices.push_back(-width / 2.0f + width * i / (float)rez); // v.x
+            vertices.push_back(0.0f); // v.y
+            vertices.push_back(-height / 2.0f + height * j / (float)rez); // v.z
+            vertices.push_back(i / (float)rez); // u
+            vertices.push_back(j / (float)rez); // v
+
+            vertices.push_back(-width / 2.0f + width * (i + 1) / (float)rez); // v.x
+            vertices.push_back(0.0f); // v.y
+            vertices.push_back(-height / 2.0f + height * j / (float)rez); // v.z
+            vertices.push_back((i + 1) / (float)rez); // u
+            vertices.push_back(j / (float)rez); // v
+
+            vertices.push_back(-width / 2.0f + width * i / (float)rez); // v.x
+            vertices.push_back(0.0f); // v.y
+            vertices.push_back(-height / 2.0f + height * (j + 1) / (float)rez); // v.z
+            vertices.push_back(i / (float)rez); // u
+            vertices.push_back((j + 1) / (float)rez); // v
+
+            vertices.push_back(-width / 2.0f + width * (i + 1) / (float)rez); // v.x
+            vertices.push_back(0.0f); // v.y
+            vertices.push_back(-height / 2.0f + height * (j + 1) / (float)rez); // v.z
+            vertices.push_back((i + 1) / (float)rez); // u
+            vertices.push_back((j + 1) / (float)rez); // v
+        }
+    }
+
+    // first, configure the cube's VAO (and terrainVBO)
+    unsigned int terrainVBO;
+    glGenVertexArrays(1, &terrainVAO);
+    glBindVertexArray(terrainVAO);
+
+    glGenBuffers(1, &terrainVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertices.size(), &vertices[0], GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // texCoord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
+    glEnableVertexAttribArray(1);
+
+    glPatchParameteri(GL_PATCH_VERTICES, 4);
+
+    glBindVertexArray(0);
 }
 
 Renderer::~Renderer()
@@ -153,15 +265,29 @@ void Renderer::EndRenderFrame()
 
     glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); 
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); 
+
     //render
     for (DrawCall* d : this->drawCalls)
     {
         //Sends and binds the normalmap, diffusemap textures. (if applicable)
-        d->BindTextureProperties(this->lightingShader);
-
+        
         //Draw with shader. (model matrix is sent here)
-        d->Render(this->lightingShader);
+        if (d->GetVAO() != this->terrainVAO)
+        {
+            this->lightingShader->use();
+            d->BindTextureProperties(this->lightingShader);
+            d->Render(this->lightingShader);
+        }   
+        else
+        {
+            this->terrainShader->use();
+            glActiveTexture(GL_TEXTURE8); // Activate unit 8
+            glBindTexture(GL_TEXTURE_2D, this->heightMapTextureID); // Bind the stored heightmap ID
+            d->Render(this->terrainShader);
+        }
+        glActiveTexture(GL_TEXTURE0); 
     }
+
     this->drawCalls.clear(); //raylib style
     //draw debug light into FBO is applicable
     if (this->drawDebugLights) this->DrawLightsDebug();
@@ -633,6 +759,12 @@ void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size
     stbi_set_flip_vertically_on_load(false);
 }
 
+void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
+{
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
+    this->drawCalls.push_back(new DrawCall(this->terrainVAO, 4 * 20 * 20, model, GL_PATCHES));
+}
+
 void Renderer::DrawLightsDebug()
 {
     this->debugLightShader->use();
@@ -776,6 +908,10 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
         glUniformMatrix4fv(glGetUniformLocation(skyShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(noTransView));
         glUniformMatrix4fv(glGetUniformLocation(skyShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     }
+
+    this->terrainShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 }
 
 void Renderer::SetupFramebuffers()

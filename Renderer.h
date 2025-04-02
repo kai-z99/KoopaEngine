@@ -16,7 +16,6 @@ public:
     //TEMP
     Camera* cam;
 
-
     //Construction
 	Renderer();
 	~Renderer();
@@ -33,6 +32,7 @@ public:
     void DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation);
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
+    void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
     void SetCurrentDiffuse(const char* path);
@@ -56,6 +56,7 @@ private:
     Shader* pointShadowShader;
     Shader* skyShader;
     Shader* blurShader;
+    Shader* terrainShader;
 
     //TEXTURES
     unsigned int currentDiffuseTexture;
@@ -65,6 +66,7 @@ private:
     unsigned int currentSkyboxTexture;
     bool usingSkybox;
     void DrawSkybox();
+    unsigned int heightMapTextureID;
 
     //MODEL
     std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
@@ -142,6 +144,7 @@ private:
     unsigned int planeVAO;
     unsigned int screenQuadVAO;
     unsigned int skyboxVAO;
+    unsigned int terrainVAO;
 
     //FRAMEBUFFERS
     void SetupFramebuffers();

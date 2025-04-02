@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glad/glad.h>
 #include "KoopaMath.h"
 
 class Shader;
@@ -9,7 +10,7 @@ class Model;
 class DrawCall
 {
 public:
-	DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model);
+	DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
 	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
@@ -24,11 +25,14 @@ public:
 	//General flags
 	void SetCulling(bool enabled);
 
+	unsigned int GetVAO();
+
 private:
 	//General data
 	unsigned int VAO;
 	unsigned int vertexCount;
 	glm::mat4 modelMatrix;
+	GLenum primitive;
 
 	//For "fs1" lighting shader
 	bool usingDiffuseMap;
