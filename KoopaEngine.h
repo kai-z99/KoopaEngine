@@ -90,6 +90,7 @@ public:
 
     void SetDrawLightsDebug(bool on);
     void SetCameraExposure(float exposure);
+    void SetCameraSpeed(float speed);
     
 private:
     void DrawFinalQuad();

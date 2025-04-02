@@ -168,6 +168,11 @@ void KoopaEngine::SetCameraExposure(float exposure)
     this->renderer->SetExposure(exposure);
 }
 
+void KoopaEngine::SetCameraSpeed(float speed)
+{
+    this->camera->moveSpeed = speed;
+}
+
 void KoopaEngine::DrawFinalQuad()
 {
     //set framebuffer to 0

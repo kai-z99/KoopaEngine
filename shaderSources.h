@@ -94,6 +94,7 @@
         uniform sampler2D texture_specular1;             //5-8
         uniform sampler2D texture_normal1;               //5-8
         uniform sampler2D texture_height1;               //5-8
+        //TERRAIN TEXTURE                                //9
         
         //UNIFORMS------------------------------------------------------------------------------------
 
@@ -705,7 +706,7 @@
         //tesselation eval
         const char* tesTerrain = R"(
         #version 410 core
-        layout (quads, fractional_odd_spacing, ccw) in;
+        layout (quads, fractional_odd_spacing, cw) in;
 
         uniform sampler2D heightMap;
         uniform mat4 model;

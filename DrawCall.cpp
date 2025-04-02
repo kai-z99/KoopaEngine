@@ -39,9 +39,6 @@ void DrawCall::Render(Shader* shader)
     if (usingCulling) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
 
-    //temp
-    glDisable(GL_CULL_FACE);
-
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
 
     if (this->model != nullptr)
