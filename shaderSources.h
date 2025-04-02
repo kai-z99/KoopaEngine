@@ -336,7 +336,7 @@
             // combine results
         
             vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-            vec3 specular = light.intensity * light.color  * spec; // * vec3(texture(material.specular, TexCoord)); not using map rn
+            vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(1.0f));
 
             diffuse  *= attenuation;
             specular *= attenuation;
@@ -371,7 +371,7 @@
 
             // combine results
             vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-            vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : 1.0f);
+            vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(1.0f));
         
             if (!light.castShadows)
             {
