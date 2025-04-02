@@ -369,6 +369,118 @@ namespace VertexBufferSetup
 
         return VAO;
     }
+
+    std::pair<unsigned int, unsigned int> SetupTerrainBuffers(const char* path)
+    {
+        // load and create a texture
+        // -------------------------
+        unsigned int heightMapTexture;
+
+        glGenTextures(1, &heightMapTexture);
+        glBindTexture(GL_TEXTURE_2D, heightMapTexture); // all upcoming GL_TEXTURE_2D operations now have effect on this texture object
+        // set the texture wrapping parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // set texture filtering parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        // load image, create texture and generate mipmaps
+        int width, height, nrChannels;
+        // The FileSystem::getPath(...) is part of the GitHub repository so we can find files on any IDE/platform; replace it with your own image path.
+        unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            GLenum format = GL_RGBA; // Assuming RGBA for now
+            if (nrChannels == 1)
+                format = GL_RED;
+            else if (nrChannels == 3)
+                format = GL_RGB;
+            // else format = GL_RGBA; // Default
+
+            // Use the determined format
+            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR) {
+                std::cerr << "!!! OpenGL Error after glTexImage2D for heightmap: " << err << std::endl;
+            }
+
+            glGenerateMipmap(GL_TEXTURE_2D);
+            err = glGetError();
+            if (err != GL_NO_ERROR) {
+                std::cerr << "!!! OpenGL Error after glGenerateMipmap for heightmap: " << err << std::endl;
+            }
+        }
+        else // stbi_load failed
+        {
+            std::cout << "Failed to load heightmap texture" << std::endl;
+        }
+        stbi_image_free(data); // Free data regardless of glTexImage2D success
+
+        // set up vertex data (and buffer(s)) and configure vertex attributes
+        // ------------------------------------------------------------------
+
+        //vertex data for a flat plane with rez * rez patches and size: width * height
+        std::vector<float> vertices;
+
+        //rez * rez patches generated.
+        unsigned rez = 20;
+        for (unsigned i = 0; i <= rez - 1; i++)
+        {
+            for (unsigned j = 0; j <= rez - 1; j++)
+            {
+                //GENERATE PATCH
+                //TL
+                vertices.push_back(-width / 2.0f + width * i / (float)rez); // v.x
+                vertices.push_back(0.0f); // v.y
+                vertices.push_back(-height / 2.0f + height * j / (float)rez); // v.z
+                vertices.push_back(i / (float)rez); // u
+                vertices.push_back(j / (float)rez); // v
+
+                //TR
+                vertices.push_back(-width / 2.0f + width * (i + 1) / (float)rez); // v.x
+                vertices.push_back(0.0f); // v.y
+                vertices.push_back(-height / 2.0f + height * j / (float)rez); // v.z
+                vertices.push_back((i + 1) / (float)rez); // u
+                vertices.push_back(j / (float)rez); // v
+
+                //BL
+                vertices.push_back(-width / 2.0f + width * i / (float)rez); // v.x
+                vertices.push_back(0.0f); // v.y
+                vertices.push_back(-height / 2.0f + height * (j + 1) / (float)rez); // v.z
+                vertices.push_back(i / (float)rez); // u
+                vertices.push_back((j + 1) / (float)rez); // v
+
+                //BR
+                vertices.push_back(-width / 2.0f + width * (i + 1) / (float)rez); // v.x
+                vertices.push_back(0.0f); // v.y
+                vertices.push_back(-height / 2.0f + height * (j + 1) / (float)rez); // v.z
+                vertices.push_back((i + 1) / (float)rez); // u
+                vertices.push_back((j + 1) / (float)rez); // v
+            }
+        }
+
+        // first, configure the cube's VAO (and terrainVBO)
+        unsigned int VBO, VAO;
+        glGenVertexArrays(1, &VAO);
+        glBindVertexArray(VAO);
+
+        glGenBuffers(1, &VBO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertices.size(), &vertices[0], GL_STATIC_DRAW);
+
+        // position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        // texCoord attribute
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
+        glEnableVertexAttribArray(1);
+
+        glPatchParameteri(GL_PATCH_VERTICES, 4);
+
+        glBindVertexArray(0);
+
+        return {VAO, heightMapTexture};
+    }
 }
 
 namespace FramebufferSetup

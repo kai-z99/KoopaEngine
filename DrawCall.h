@@ -25,7 +25,8 @@ public:
 	//General flags
 	void SetCulling(bool enabled);
 
-	unsigned int GetVAO();
+	const char* GetHeightMapPath();
+	void SetHeightMapPath(const char* path);
 
 private:
 	//General data
@@ -40,6 +41,9 @@ private:
 	unsigned int diffuseMapTexture;
 	Vec3 diffuseColor;
 	unsigned int normalMapTexture;
+
+	//for terrain
+	const char* heightMapPath;
 
 	//General flags
 	bool usingCulling;

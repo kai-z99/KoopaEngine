@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <utility>
 
 namespace VertexBufferSetup
 {
@@ -10,6 +11,8 @@ namespace VertexBufferSetup
     unsigned int SetupPlaneBuffers();
     unsigned int SetupScreenQuadBuffers();
     unsigned int SetupSkyboxBuffers();
+    //return <VAO, texture id>
+    std::pair<unsigned int, unsigned int> SetupTerrainBuffers(const char* path);
 }
 
 namespace FramebufferSetup

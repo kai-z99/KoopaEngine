@@ -7,7 +7,8 @@
 
 DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model, GLenum primitive)
 {
-    this->model = nullptr;
+    this->model = nullptr; //if this stays null, we are not drawing a model.
+    this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
 
     //general data
     this->VAO = VAO;
@@ -28,8 +29,12 @@ DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& 
 
 DrawCall::DrawCall(Model* m, const glm::mat4 model)
 {
+    this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
     this->model = m;
     this->modelMatrix = model;
+
+    //general flags
+    this->usingCulling = true;
 }
 
 void DrawCall::Render(Shader* shader)
@@ -127,7 +132,13 @@ void DrawCall::SetCulling(bool enabled)
     this->usingCulling = enabled;
 }
 
-unsigned int DrawCall::GetVAO()
+const char* DrawCall::GetHeightMapPath()
 {
-    return this->VAO;
+    return this->heightMapPath;
+}
+
+void DrawCall::SetHeightMapPath(const char* path)
+{
+    assert(this->model == nullptr);
+    this->heightMapPath = path;
 }

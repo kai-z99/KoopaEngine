@@ -4,6 +4,7 @@
 #include "Definitions.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <unordered_map>
+#include <utility>
 
 class Shader;
 class DrawCall;
@@ -66,7 +67,6 @@ private:
     unsigned int currentSkyboxTexture;
     bool usingSkybox;
     void DrawSkybox();
-    unsigned int heightMapTextureID;
 
     //MODEL
     std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
@@ -145,6 +145,7 @@ private:
     unsigned int screenQuadVAO;
     unsigned int skyboxVAO;
     unsigned int terrainVAO;
+    std::unordered_map<const char*, std::pair<unsigned int, unsigned int>> pathToTerrainVAOandTexture; //path : <VAO, texture>
 
     //FRAMEBUFFERS
     void SetupFramebuffers();
