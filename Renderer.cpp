@@ -458,41 +458,6 @@ void Renderer::RenderCascadedShadowMap()
 
 }
 
-void Renderer::RenderCascadedShadowMapGeo()
-{
-    this->cascadeShadowShader->use();
-
-    glBindFramebuffer(GL_FRAMEBUFFER, this->cascadeShadowMapFBO); //texture array is attached
-    glViewport(0, 0, CASCADE_SHADOW_WIDTH, CASCADE_SHADOW_HEIGHT);
-    
-    std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
-
-    for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
-    {
-        std::string m = "lightSpaceMatrices[" + std::to_string(i) + "]";
-        glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, m.c_str()), 1,
-            false, glm::value_ptr(lightSpaceMatrices[i]));
-    }
-
-    int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE)
-    {
-        std::cout << "ERROR::FRAMEBUFFER:: Cascade Framebuffer is not complete!" << '\n';
-    }
-    
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    glCullFace(GL_FRONT);  // peter panning
-    for (DrawCall* d : this->drawCalls)
-    {
-        d->SetCulling(false);
-        d->Render(this->cascadeShadowShader);
-    }
-
-    glCullFace(GL_BACK);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
 void Renderer::RenderPointShadowMap(unsigned int index)
 {
     this->pointShadowShader->use();
@@ -840,3 +805,39 @@ void Renderer::SetupVertexBuffers()
     this->skyboxVAO = VertexBufferSetup::SetupSkyboxBuffers();
 }
 
+/*
+void Renderer::RenderCascadedShadowMapGeo()
+{
+    this->cascadeShadowShader->use();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, this->cascadeShadowMapFBO); //texture array is attached
+    glViewport(0, 0, CASCADE_SHADOW_WIDTH, CASCADE_SHADOW_HEIGHT);
+
+    std::vector<glm::mat4> lightSpaceMatrices = this->GetCascadeMatrices();
+
+    for (unsigned int i = 0; i < lightSpaceMatrices.size(); i++)
+    {
+        std::string m = "lightSpaceMatrices[" + std::to_string(i) + "]";
+        glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, m.c_str()), 1,
+            false, glm::value_ptr(lightSpaceMatrices[i]));
+    }
+
+    int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "ERROR::FRAMEBUFFER:: Cascade Framebuffer is not complete!" << '\n';
+    }
+
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    glCullFace(GL_FRONT);  // peter panning
+    for (DrawCall* d : this->drawCalls)
+    {
+        d->SetCulling(false);
+        d->Render(this->cascadeShadowShader);
+    }
+
+    glCullFace(GL_BACK);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+*/

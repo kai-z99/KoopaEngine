@@ -253,8 +253,8 @@
             float fragDepth = projCoords.z;
             if (fragDepth > 1.0f) return 0.0f;
             
-            //BIAS (0.00035 is optimal, no culling)
-            float bias = max(0.0035 * (1.0 - dot(normal, lightDir)), 0.00035); //more bias with more angle.
+            //BIAS (0.00035 is optimal NOTTT, no culling)
+            float bias = max(0.0045 * (1.0 - dot(normal, lightDir)), 0.00045); //more bias with more angle.
             if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
             else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
@@ -315,6 +315,7 @@
 
         vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, int index)
         {
+    
             if (light.isActive == false)
             {
                 return vec3(0.0f, 0.0f, 0.0f);
@@ -681,9 +682,26 @@
 
         in vec2 TexCoords_VS_OUT[]; //since were working in patches
         out vec2 TexCoords_TCS_OUT[]; //likewise
+            
+        const int MIN_TESS_LEVEL = 4;
+        const int MAX_TESS_LEVEL = 64;
+        const float MIN_DISTANCE = 15.0f;
+        const float MAX_DISTANCE = 200.0f;
+
+        uniform mat4 model;
+        uniform mat4 view;
 
         void main()
         {
+            //NOTE: gl_in[] is a built-in, read-only array that contains all the vertices of the current patch. 
+            //      (the data includes position and other per-vertex attributes)
+
+            //NOTE:  gl_in[0] : TL WORLD
+            //       gl_in[1] : TR WORLD
+            //       gl_in[2] : BL WORLD
+            //       gl_in[3] : BR WORLD
+            //           Since we defined them in this order in vertex buffer creation. (See cpp code)
+
             //pass through
             gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
             TexCoords_TCS_OUT[gl_InvocationID] = TexCoords_VS_OUT[gl_InvocationID];
@@ -692,13 +710,46 @@
             //0 controls tessellation level
             if (gl_InvocationID == 0)
             {
-                gl_TessLevelOuter[0] = 16; //left side of square
-                gl_TessLevelOuter[1] = 16; //bottom 
-                gl_TessLevelOuter[2] = 16; //right
-                gl_TessLevelOuter[3] = 16; //top
+                //TL WORLD
+                vec4 viewSpacePos00 = view * model * gl_in[0].gl_Position; //see note but this is the position of a vertex of the current patch
+                //TR WORLD
+                vec4 viewSpacePos01 = view * model * gl_in[1].gl_Position;
+                //BL WORLD
+                vec4 viewSpacePos10 = view * model * gl_in[2].gl_Position;
+                //BR WORLD
+                vec4 viewSpacePos11 = view * model * gl_in[3].gl_Position;
+                
+                //note: distance from the camera [0,1]
+                //TL WORLD
+                float distance00 = clamp((abs(viewSpacePos00.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
+                //TR WORLD
+                float distance01 = clamp((abs(viewSpacePos01.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
+                //BL WORLD
+                float distance10 = clamp((abs(viewSpacePos10.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
+                //BR WORLD
+                float distance11 = clamp((abs(viewSpacePos11.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
 
-                gl_TessLevelInner[0] = 16; //inner top/bot
-                gl_TessLevelInner[1] = 16; //inner l/r
+                //interpolate tesselation based on closer vertex
+                
+                //NOTE: OL-0  is left side of cube. So take the min of the distances of the TL and BL vertices.
+                //NOTE: refer to diagram on openGL wiki, but with 0,0 at the top left.
+                //       why? Try mentally overlaying the origina diagram on flat terrain. The coords dont match.
+                //       +y is tess space is like -z in world space. This is why top and bottom are swapped.
+                float tessLevel0 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance00, distance10));
+                //Ol-1: top. TL and TR
+                float tessLevel1 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance00, distance01));
+                //Ol-2: right. BR and TR
+                float tessLevel2 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance01, distance11));
+                //Ol-3: bottom. BL and BR
+                float tessLevel3 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance11, distance10));
+
+                gl_TessLevelOuter[0] = tessLevel0;  //left
+                gl_TessLevelOuter[1] = tessLevel1;  //top  'bot' in local tessCoords
+                gl_TessLevelOuter[2] = tessLevel2;  //right
+                gl_TessLevelOuter[3] = tessLevel3;  //bot  'top' in local tessCoords
+                
+                gl_TessLevelInner[0] = max(tessLevel1, tessLevel3); //inner top/bot
+                gl_TessLevelInner[1] = max(tessLevel0, tessLevel2); //inner l/r
             }
         }
         )";
