@@ -81,12 +81,19 @@ Renderer::Renderer()
     this->terrainShader = new Shader(ShaderSources::vsTerrain, ShaderSources::fs1, nullptr,
         ShaderSources::tcsTerrain, ShaderSources::tesTerrain);
     this->terrainShader->use();
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9); //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9);        //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
+    //Stuff for cascade shadows
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
+    for (int i = 0; i < this->cascadeLevels.size(); i++)
+    {
+        std::string l = "cascadeDistances[" + std::to_string(i) + "]";
+        glUniform1f(glGetUniformLocation(this->terrainShader->ID, l.c_str()), this->cascadeLevels[i]);
+    }
 
     //LIGHTING-------------------------------------------------
 
@@ -105,6 +112,18 @@ Renderer::Renderer()
  
     //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
     this->SetupFramebuffers();
+
+    GLint maxTessLevel = 0;
+    glGetIntegerv(GL_MAX_TESS_GEN_LEVEL, &maxTessLevel);
+
+    if (maxTessLevel > 0) {
+        std::cout << "Maximum Supported Tessellation Generation Level: " << maxTessLevel << std::endl;
+    }
+    else {
+        // Check glGetError() if needed, but usually means tessellation isn't supported
+        // or the context isn't properly set up for GL 4.0+.
+        std::cerr << "Could not query GL_MAX_TESS_GEN_LEVEL. Tessellation might not be supported." << std::endl;
+    }
 }
 
 Renderer::~Renderer()
@@ -385,8 +404,6 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
         maxZ = std::max(maxZ, cLightSpace.z);
     }
 
-    
-
     //Pull in near plane, push out far plane
     float zMult = 10.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
@@ -445,6 +462,12 @@ void Renderer::RenderCascadedShadowMap()
         glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, l.c_str()), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
 
+        //TEMP
+        this->terrainShader->use();
+        glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, l.c_str()), 1,
+            false, glm::value_ptr(lightSpaceMatrices[i]));
+
+
         //send lightspace matrix to cascade vertex shader for current use
         this->cascadeShadowShader->use();
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
@@ -492,6 +515,9 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     //send some uniforms
     this->lightingShader->use();
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "farPlane"), far);
+    this->terrainShader->use();
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "farPlane"), far);
+
     this->pointShadowShader->use();
     glUniform1f(glGetUniformLocation(this->pointShadowShader->ID, "farPlane"), far);
     glUniform3fv(glGetUniformLocation(this->pointShadowShader->ID, "lightPos"), 1, glm::value_ptr(lightPos));

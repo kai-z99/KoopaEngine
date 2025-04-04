@@ -3,14 +3,14 @@
 namespace ShaderSources
 {
     const char* vs1 = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aNormal;
     layout (location = 2) in vec2 aTexCoords;
     layout (location = 3) in vec3 aTangent;
     layout (location = 4) in vec3 aBitangent;
         
-    //UNIFORMS ------------------------------------------------------------------------------------
+    //SHARED UNIFORMS ------------------------------------------------------------------------------------
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
@@ -43,7 +43,7 @@ namespace ShaderSources
     )";
 
     const char* fs1 = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
     layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
@@ -97,7 +97,9 @@ namespace ShaderSources
     //TERRAIN TEXTURE                                //9
         
     //UNIFORMS------------------------------------------------------------------------------------
-
+    
+    
+    
     //cascade
     uniform float cascadeDistances[4];              //compile time
     uniform int cascadeCount;                       //compile time
@@ -389,7 +391,7 @@ namespace ShaderSources
     )";
 
     const char* fsLight = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) out vec4 FragColor; //COLOR_ATTACHEMNT0
     layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHEMNT1
         
@@ -407,7 +409,7 @@ namespace ShaderSources
     )";
 
     const char* vsScreenQuad = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) in vec2 aPos;
     layout (location = 1) in vec2 aTexCoords;
 
@@ -421,7 +423,7 @@ namespace ShaderSources
     )";
 
     const char* fsScreenQuad = R"(
-    #version 410 core
+    #version 420 core
     out vec4 FragColor;
   
     in vec2 TexCoords;
@@ -479,7 +481,7 @@ namespace ShaderSources
     )";
 
     const char* fsBlur = R"(
-    #version 410 core
+    #version 420 core
     out vec4 FragColor;
         
     in vec2 TexCoords;
@@ -522,7 +524,7 @@ namespace ShaderSources
     )";
 
     const char* vsDirShadow = R"(
-    #version 410 core
+    #version 420 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -537,7 +539,7 @@ namespace ShaderSources
     )";
 
     const char* fsDirShadow = R"(
-    #version 410 core
+    #version 420 core
 
     void main()
     {
@@ -546,7 +548,7 @@ namespace ShaderSources
     )";
 
     const char* vsCascadedShadow = R"(
-    #version 410 core
+    #version 420 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -561,7 +563,7 @@ namespace ShaderSources
     )";
 
     const char* fsCascadedShadow = R"(
-    #version 410 core
+    #version 420 core
 
     void main()
     {
@@ -570,7 +572,7 @@ namespace ShaderSources
     )";
 
     const char* gsCascadedShadow = R"(
-    #version 410 core
+    #version 420 core
 
     layout(triangles, invocations = 5) in;
     layout(triangle_strip, max_vertices = 3) out;
@@ -591,7 +593,7 @@ namespace ShaderSources
     )";
 
     const char* vsPointShadow = R"(
-    #version 410 core
+    #version 420 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -608,7 +610,7 @@ namespace ShaderSources
     )";
 
     const char* fsPointShadow = R"(
-    #version 410 core
+    #version 420 core
 
     in vec3 FragPos;
 
@@ -628,7 +630,7 @@ namespace ShaderSources
     )";
 
     const char* vsSkybox = R"(
-    #version 410 core
+    #version 420 core
     
     layout (location = 0) in vec3 aPos;
     
@@ -648,7 +650,7 @@ namespace ShaderSources
 
         
     const char* fsSkybox = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) out vec4 FragColor;
 
     in vec3 TexCoords;
@@ -662,7 +664,7 @@ namespace ShaderSources
     )";
 
     const char* vsTerrain = R"(
-    #version 410 core
+    #version 420 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoords;
 
@@ -677,13 +679,13 @@ namespace ShaderSources
 
     //tesselation control
     const char* tcsTerrain = R"(
-    #version 410 core
+    #version 420 core
     layout (vertices = 4) out;
 
     in vec2 TexCoords_VS_OUT[]; //since were working in patches
     out vec2 TexCoords_TCS_OUT[]; //likewise
             
-    const int MIN_TESS_LEVEL = 4;
+    const int MIN_TESS_LEVEL = 16;
     const int MAX_TESS_LEVEL = 64;
     const float MIN_DISTANCE = 15.0f;
     const float MAX_DISTANCE = 200.0f;
@@ -729,7 +731,7 @@ namespace ShaderSources
             //BR WORLD
             float distance11 = clamp((abs(viewSpacePos11.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
 
-            //interpolate tesselation based on closer vertex
+            //interpolate tesselation based on closer vertex-------------------------------------------------
                 
             //NOTE: OL-0  is left side of cube. So take the min of the distances of the TL and BL vertices.
             //NOTE: refer to diagram on openGL wiki, but with 0,0 at the top left.
@@ -754,9 +756,9 @@ namespace ShaderSources
     }
     )";
 
-    //tesselation eval
+    //tesselation eval, for each tesselated vertex
     const char* tesTerrain = R"(
-    #version 410 core
+    #version 420 core
     layout (quads, fractional_odd_spacing, cw) in;
 
     uniform sampler2D heightMap;
@@ -799,21 +801,23 @@ namespace ShaderSources
         //the height of this vertex.
         float currentHeight = texture(heightMap, currentTexCoord).r * heightScale + heightOffset;
             
-        //position control points
-        vec4 p00 = gl_in[0].gl_Position;
-        vec4 p01 = gl_in[1].gl_Position;
-        vec4 p10 = gl_in[2].gl_Position;
-        vec4 p11 = gl_in[3].gl_Position;
-            
-        //compute normals
-        vec4 uVec = p01 - p00;
-        vec4 vVec = p10 - p00;
-        vec4 patchNormal = normalize( vec4(cross(vVec.xyz, uVec.xyz), 0) ); //should be 0,1,0
-            
+        //position control points (model space)
+        vec4 p00 = gl_in[0].gl_Position; //TL 
+        vec4 p01 = gl_in[1].gl_Position; //TR 
+        vec4 p10 = gl_in[2].gl_Position; //BL 
+        vec4 p11 = gl_in[3].gl_Position; //BR 
+
         //bilinear interpolate the vertexes position from control points
         vec4 p0 = (p01 - p00) * u + p00;
         vec4 p1 = (p11 - p10) * u + p10;
         vec4 position = (p1 - p0) * v + p0;
+            
+        //compute normals
+        vec4 uVec = p01 - p00; //TL -> TR (1,0,0)
+        vec4 vVec = p10 - p00; //TL -> BL (0,0,1)
+        vec4 patchNormal = normalize( vec4(cross(vVec.xyz, uVec.xyz), 0) ); //should be (0,1,0)
+
+        //use normal to extrude plane vertex
         position += patchNormal * currentHeight;
 
         //NORMAL CALCLUATION - FINITE DIFFERENCES -------------------
@@ -829,15 +833,21 @@ namespace ShaderSources
         float height_R = texture(heightMap, texCoord_R).r * heightScale + heightOffset;
         float height_B = texture(heightMap, texCoord_B).r * heightScale + heightOffset;
         float height_T = texture(heightMap, texCoord_T).r * heightScale + heightOffset;
-
+ 
         //Calculate tangent vectors
-        //dX = 2.0*1.0 = 2.0 (assuming U maps to X)
-        vec3 tangentU = vec3(2.0 * worldTexelSize.x, height_R - height_L, 0.0);
-        //dZ = 2.0*1.0 = 2.0 (assuming V maps to -Z)
-        vec3 tangentV = vec3(0.0, height_T - height_B, 2.0 * worldTexelSize.y); 
+        //--
+        //  This simulates moving along +U (x axis in model space). 
+        //  going from L (texcoord - 1) to R (texcoord + 1) is total of 2.0 units along the x axis.
+        //  Then the change is height (from L to R) is R - L.
+        vec3 tangentU = vec3(2.0 * worldTexelSize.x, height_R - height_L, 0.0); //dU
+
+        //  This simulates moving along +V (-z axis in model space). 
+        //  going from B (texcoord - 1) to T (texcoord + 1) is total of 2.0 units along the -z axis.
+        //  Then the change is height (from B to T) is T - B.
+        vec3 tangentV = vec3(0.0, height_T - height_B, -2.0 * worldTexelSize.y); //dV
 
         //world space Normal/Tangent
-        vec3 normalLocal = cross(tangentV, tangentU);
+        vec3 normalLocal = cross(tangentU, tangentV);
 
         mat3 normalMatrix = transpose(inverse(mat3(model)));
         vec3 worldNormal = normalize(normalMatrix * normalLocal);
@@ -861,7 +871,7 @@ namespace ShaderSources
     )";
 
     const char* fsTerrain = R"(
-    #version 410 core
+    #version 420 core
 
     in float Height;
     in vec3 Normal;
@@ -879,7 +889,7 @@ namespace ShaderSources
 
 /*
 const char* tesTerrain = R"(
-    #version 410 core
+    #version 420 core
     layout (quads, fractional_odd_spacing, cw) in;
 
     uniform sampler2D heightMap;
