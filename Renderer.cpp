@@ -78,7 +78,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->skyShader->ID, "skyboxTexture"), 0); //GL_TEXTURE0
 
     //tesselation for heightmap
-    this->terrainShader = new Shader(ShaderSources::vsTerrain, ShaderSources::fsTerrain, nullptr,
+    this->terrainShader = new Shader(ShaderSources::vsTerrain, ShaderSources::fs1, nullptr,
         ShaderSources::tcsTerrain, ShaderSources::tesTerrain);
     this->terrainShader->use();
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9); //GL_TEXTURE0
@@ -739,6 +739,14 @@ void Renderer::SendDirLightUniforms()
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "dirLight.intensity"), dirLight.intensity);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirLight.isActive"), dirLight.isActive);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirLight.castShadows"), dirLight.castShadows);
+
+    this->terrainShader->use();
+
+    glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "dirLight.direction"), 1, glm::value_ptr(dirLight.direction));
+    glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "dirLight.color"), 1, glm::value_ptr(dirLight.color));
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "dirLight.intensity"), dirLight.intensity);
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirLight.isActive"), dirLight.isActive);
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirLight.castShadows"), dirLight.castShadows);
 }
 
 void Renderer::InitializePointLights()

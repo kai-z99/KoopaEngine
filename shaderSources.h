@@ -355,6 +355,7 @@ namespace ShaderSources
 
     vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
     {
+        //return normal;
         if (light.isActive == false)
         {
             return vec3(0.0f, 0.0f, 0.0f);
@@ -836,7 +837,7 @@ namespace ShaderSources
         vec3 tangentV = vec3(0.0, height_T - height_B, 2.0 * worldTexelSize.y); 
 
         //world space Normal/Tangent
-        vec3 normalLocal = cross(tangentU, tangentV);
+        vec3 normalLocal = cross(tangentV, tangentU);
 
         mat3 normalMatrix = transpose(inverse(mat3(model)));
         vec3 worldNormal = normalize(normalMatrix * normalLocal);
@@ -870,7 +871,7 @@ namespace ShaderSources
     void main()
     {
         float h = (Height + 16)/64.0f;
-        FragColor = vec4(h, h, h, 1.0);
+        //FragColor = vec4(h, h, h, 1.0);
         FragColor = vec4(Normal, 1.0);
     }             
     )";
