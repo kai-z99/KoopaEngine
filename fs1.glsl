@@ -1,70 +1,104 @@
-        #version 410 core
-        layout (vertices = 4) out;
+#version 410 core
+layout (quads, fractional_odd_spacing, cw) in;
 
-        in vec2 TexCoords_VS_OUT[]; //since were working in patches
-        out vec2 TexCoords_TCS_OUT[]; //likewise
+uniform sampler2D heightMap;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+const float heightScale = 64.0f;
+const float heightOffset = -16.0f;
+
+in vec2 TexCoords_TCS_OUT[]; //array of texture coords of the current patch where this current vertex is located.
+                    //since its quads, one in each corner. (Control points)
+        
+out vec3 Normal;
+out vec2 TexCoords;
+out vec3 FragPos;
+out float Height;
+out mat3 TBN;
+
+const vec2 worldTexelSize = vec2(1.0f, 1.0f);
+//For simplicity, texturesize is equivalnt to world size.
+
+        
+
+void main()
+{
+    //get tess coords [0,1]
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+
+    //texcoord control points
+    vec2 t00 = TexCoords_TCS_OUT[0];
+    vec2 t01 = TexCoords_TCS_OUT[1];
+    vec2 t10 = TexCoords_TCS_OUT[2];
+    vec2 t11 = TexCoords_TCS_OUT[3];
+
+    //bilinear interpolate the tessCoord texCoord from control points
+    vec2 t0 = (t01 - t00) * u + t00;
+    vec2 t1 = (t11 - t10) * u + t10;
+    vec2 currentTexCoord = (t1 - t0) * v + t0; //the texcoord of the current vertex based of its control points.
             
-        const int MIN_TESS_LEVEL = 4;
-        const int MAX_TESS_LEVEL = 64;
-        const float MIN_DISTANCE = 15.0f;
-        const float MAX_DISTANCE = 200.0f;
+    //the height of this vertex.
+    float currentHeight = texture(heightMap, currentTexCoord).r * heightScale + heightOffset;
+            
+    //position control points
+    vec4 p00 = gl_in[0].gl_Position;
+    vec4 p01 = gl_in[1].gl_Position;
+    vec4 p10 = gl_in[2].gl_Position;
+    vec4 p11 = gl_in[3].gl_Position;
+            
+    //compute normals
+    vec4 uVec = p01 - p00;
+    vec4 vVec = p10 - p00;
+    vec4 patchNormal = normalize( vec4(cross(vVec.xyz, uVec.xyz), 0) ); //should be 0,1,0
+            
+    //bilinear interpolate the vertexes position from control points
+    vec4 p0 = (p01 - p00) * u + p00;
+    vec4 p1 = (p11 - p10) * u + p10;
+    vec4 position = (p1 - p0) * v + p0;
+    position += patchNormal * currentHeight;
 
-        void main()
-        {
-            //NOTE: gl_in[] is a built-in, read-only array that contains all the vertices of the current patch. 
-            //      (the data includes position and other per-vertex attributes)
+    //NORMAL CALCLUATION - FINITE DIFFERENCES -------------------
+    vec2 texelSize = 1.0f / textureSize(heightMap, 0);
+    //Get texCoords for neighbors
+    vec2 texCoord_L = currentTexCoord - vec2(texelSize.x, 0);
+    vec2 texCoord_R = currentTexCoord + vec2(texelSize.x, 0);
+    vec2 texCoord_B = currentTexCoord - vec2(0, texelSize.y);
+    vec2 texCoord_T = currentTexCoord + vec2(0, texelSize.y);
 
-            //NOTE: gl_in[0] : TL
-                    gl_in[1] : TR
-                    gl_in[2] : BL
-                    gl_in[3] : BR
-                        Since we defined them in this order in vertex buffer creation. (See cpp code)
+    //Get heights of neighboring texels
+    float height_L = texture(heightMap, texCoord_L).r * heightScale + heightOffset;
+    float height_R = texture(heightMap, texCoord_R).r * heightScale + heightOffset;
+    float height_B = texture(heightMap, texCoord_B).r * heightScale + heightOffset;
+    float height_T = texture(heightMap, texCoord_T).r * heightScale + heightOffset;
 
-            //pass through
-            gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
-            TexCoords_TCS_OUT[gl_InvocationID] = TexCoords_VS_OUT[gl_InvocationID];
-            //----
+    //Calculate tangent vectors
+    //dX = 2.0*1.0 = 2.0 (assuming U maps to X)
+    vec3 tangentU = vec3(2.0 * worldTexelSize.x, height_R - height_L, 0.0);
+    //dZ = 2.0*1.0 = 2.0 (assuming V maps to -Z)
+    vec3 tangentV = vec3(0.0, height_T - height_B, 2.0 * worldTexelSize.y); 
 
-            //0 controls tessellation level
-            if (gl_InvocationID == 0)
-            {
-                //TL
-                vec4 viewSpacePos00 = view * model * gl_in[0].gl_Position; //see note but this is the position of a vertex of the current patch
-                //TR
-                vec4 viewSpacePos01 = view * model * gl_in[1].gl_Position;
-                //BL
-                vec4 viewSpacePos10 = view * model * gl_in[2].gl_Position;
-                //BR
-                vec4 viewSpacePos11 = view * model * gl_in[3].gl_Position;
-                
-                //note: distance from the camera [0,1]
-                //TL
-                float distance00 = clamp((abs(viewSpacePos00.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
-                //TR
-                float distance01 = clamp((abs(viewSpacePos01.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
-                //BL
-                float distance10 = clamp((abs(viewSpacePos10.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
-                //BR
-                float distance11 = clamp((abs(viewSpacePos11.z) - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE), 0.0f, 1.0f);
+    //world space Normal/Tangent
+    vec3 normalLocal = cross(tangentU, tangentV);
 
-                //interpolate tesselation based on closer vertex
+    mat3 normalMatrix = transpose(inverse(mat3(model)));
+    vec3 worldNormal = normalize(normalMatrix * normalLocal);
+    
+    //calculate TBN matrix
+    vec3 tangentLocal = normalize(tangentU - dot(tangentU, normalLocal) * normalLocal);
 
-                //NOTE: OL-0  is left side of cube. So take the min of the distances of the TL and BL vertices.
-                float tessLevel0 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance00, distance10));
-                //Ol-1: bottom. BL and BR
-                float tessLevel1 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance10, distance11));
-                //Ol-2: right. BR and TR
-                float tessLevel2 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance01, distance11));
-                //Ol-3: top. TL and TR
-                float tessLevel3 = mix(MAX_TESS_LEVEL, MIN_TESS_LEVEL, min(distance00, distance01));
-                
+    vec3 worldTangent = normalize(normalMatrix * tangentLocal);
+    vec3 worldBiTangent = normalize(cross(worldNormal, worldTangent));
 
-                gl_TessLevelOuter[0] = tessLevel0;
-                gl_TessLevelOuter[1] = tessLevel1;
-                gl_TessLevelOuter[2] = tessLevel2;
-                gl_TessLevelOuter[3] = tessLevel3;
-                
-                gl_TessLevelInner[0] = max(tessLevel1, tessLevel3); //inner top/bot
-                gl_TessLevelInner[1] = max(tessLevel0, tessLevel2); //inner l/r
-            }
-        }
+    mat3 tbn = mat3(worldTangent,worldBiTangent,worldNormal);
+
+    //FINAL OUT VALUES
+    gl_Position = projection * view * model * position;
+    FragPos = vec3(model * position);
+    Normal = worldNormal;
+    TexCoords = currentTexCoord;
+    Height = currentHeight;
+    TBN = tbn;
+}

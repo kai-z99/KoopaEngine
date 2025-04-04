@@ -82,6 +82,11 @@ Renderer::Renderer()
         ShaderSources::tcsTerrain, ShaderSources::tesTerrain);
     this->terrainShader->use();
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9); //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
 
     //LIGHTING-------------------------------------------------
 
@@ -177,6 +182,7 @@ void Renderer::EndRenderFrame()
             this->terrainShader->use();
             glActiveTexture(GL_TEXTURE9); // Activate unit 9
             glBindTexture(GL_TEXTURE_2D, this->pathToTerrainVAOandTexture[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
+            d->BindTextureProperties(this->terrainShader);
             d->Render(this->terrainShader);
         }
         glActiveTexture(GL_TEXTURE0); 
