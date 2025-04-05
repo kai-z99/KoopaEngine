@@ -36,8 +36,8 @@ public:
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
-    void SetCurrentDiffuse(const char* path);
-    void SetCurrentColorDiffuse(Vec3 col);
+    void SetCurrentDiffuse(const char* path, float specularIntensity);
+    void SetCurrentColorDiffuse(Vec3 col, float specularIntensity);
     void SetCurrentNormal(const char* path);
     void SetSkybox(const std::vector<const char*>& faces);
     void SetExposure(float exposure);

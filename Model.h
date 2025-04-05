@@ -42,7 +42,11 @@ public:
     void Draw(Shader& shader)
     {
         for (unsigned int i = 0; i < meshes.size(); i++)
+        {
+            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasNormalMap"), meshes[i].hasNormalMap);
             meshes[i].Draw(shader);
+        }
+            
     }
 
 private:
@@ -201,7 +205,6 @@ private:
         return textures;
     }
 };
-
 
 unsigned int TextureFromFile(const char* path, const string& directory, bool gamma)
 {

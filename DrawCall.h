@@ -17,9 +17,10 @@ public:
 	void Render(Shader* shader);
 
 	//For "fs1" lighting shader
-	void BindTextureProperties(Shader* shader);
+	void SendMaterialUniforms(Shader* shader);
 	void SetNormalMapTexture(unsigned int id);
 	void SetDiffuseMapTexture(unsigned int id);
+	void SetSpecularIntensity(float shiny);
 	void SetDiffuseColor(Vec3 col);
 
 	//General flags
@@ -35,12 +36,13 @@ private:
 	glm::mat4 modelMatrix;
 	GLenum primitive;
 
-	//For "fs1" lighting shader
+	//Material
 	bool usingDiffuseMap;
 	bool usingNormalMap;
 	unsigned int diffuseMapTexture;
 	Vec3 diffuseColor;
 	unsigned int normalMapTexture;
+	float specularIntensity;
 
 	//for terrain
 	const char* heightMapPath;
@@ -48,6 +50,6 @@ private:
 	//General flags
 	bool usingCulling;
 
-	//Drawing a predefined model?
+	//Drawing a predefined model
 	Model* model;
 };

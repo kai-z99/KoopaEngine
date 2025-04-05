@@ -93,14 +93,14 @@ float KoopaEngine::GetCurrentFrame()
     return this->currentFrame;
 }
 
-void KoopaEngine::SetCurrentDiffuseTexture(const char* path)
+void KoopaEngine::SetCurrentDiffuseTexture(const char* path, float specularIntensity)
 {
-    this->renderer->SetCurrentDiffuse(path);
+    this->renderer->SetCurrentDiffuse(path, specularIntensity);
 }
 
-void KoopaEngine::SetCurrentDiffuseTexture(Vec3 col)
+void KoopaEngine::SetCurrentDiffuseTexture(Vec3 col, float specularIntensity)
 {
-    this->renderer->SetCurrentColorDiffuse(col);
+    this->renderer->SetCurrentColorDiffuse(col, specularIntensity);
 }
 
 void KoopaEngine::SetCurrentNormalTexture(const char* path)

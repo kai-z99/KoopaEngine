@@ -19,12 +19,13 @@ DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& 
     //general flags
     this->usingCulling = true;
 
-    //"fs1" lighting shader flags
+    //Material properties
     this->usingDiffuseMap = false;
     this->usingNormalMap = false;
     this->diffuseMapTexture = -1;
     this->normalMapTexture = -1;
     this->diffuseColor = noTexturePink; //missingTexture color
+    this->specularIntensity = 1.0f;     //default depculat intensity if setdiffuse is never called
 }
 
 DrawCall::DrawCall(Model* m, const glm::mat4 model)
@@ -63,7 +64,7 @@ void DrawCall::Render(Shader* shader)
 
 
 
-void DrawCall::BindTextureProperties(Shader* shader)
+void DrawCall::SendMaterialUniforms(Shader* shader)
 {
     shader->use();
 
@@ -107,6 +108,8 @@ void DrawCall::BindTextureProperties(Shader* shader)
 
     //TEXTURE3: POINT SHADOWMAP
     //Done in renderer.
+
+    glUniform1f(glGetUniformLocation(shader->ID, "specularIntensity"), this->specularIntensity);
 }
 
 void DrawCall::SetNormalMapTexture(unsigned int id)
@@ -119,6 +122,11 @@ void DrawCall::SetDiffuseMapTexture(unsigned int id)
 {
     this->diffuseMapTexture = id;
     this->usingDiffuseMap = true;
+}
+
+void DrawCall::SetSpecularIntensity(float shiny)
+{
+    this->specularIntensity = shiny;
 }
 
 void DrawCall::SetDiffuseColor(Vec3 col)

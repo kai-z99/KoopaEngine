@@ -54,11 +54,8 @@ namespace ShaderSources
         bool isActive;
         bool castShadows;
     };  
-
     vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, int index);
-    uniform PointLight pointLights[4];
-    uniform int numPointLights;
-    
+ 
     struct DirLight {
         vec3 direction;
         vec3 color;
@@ -66,9 +63,7 @@ namespace ShaderSources
         bool isActive;    
         bool castShadows;
     };
-
     vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
-    uniform DirLight dirLight;
     
     float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
     float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir);
@@ -82,41 +77,57 @@ namespace ShaderSources
     in vec4 FragPosDirLightSpace;
         
     //SAMPLERS------------------------------------------------------------------------------------
-    //material
-    uniform sampler2D currentDiffuse;               //0
-    uniform sampler2D currentNormalMap;             //1
-    //shadowmaps
-    uniform sampler2D dirShadowMap;                 //2
-    uniform samplerCubeArray pointShadowMapArray;   //3
-    uniform sampler2DArray cascadeShadowMaps;       //4
-    //model
+    uniform sampler2D currentDiffuse;                //0
+    uniform sampler2D currentNormalMap;              //1
+    uniform sampler2D dirShadowMap;                  //2
+    uniform samplerCubeArray pointShadowMapArray;    //3
+    uniform sampler2DArray cascadeShadowMaps;        //4
     uniform sampler2D texture_diffuse1;              //5-8
     uniform sampler2D texture_specular1;             //5-8
     uniform sampler2D texture_normal1;               //5-8
     uniform sampler2D texture_height1;               //5-8
     //TERRAIN TEXTURE                                //9
-        
-    //UNIFORMS------------------------------------------------------------------------------------
     
+    //TODO: If using UBOs.
+    /*
+    //SHARED UNIFORMS------------------------------------------------------------------------------------
+    layout (std140, binding = 0) uniform SharedFSData
+    {
+        mat4 view;
+        vec3 viewPos;
+        float farPlane;
     
-    
-    //cascade
-    uniform float cascadeDistances[4];              //compile time
+        DirLight dirLight;
+        PointLight pointLights[4];
+        int numPointLights;
+
+        mat4 cascadeLightSpaceMatrices[5];
+        float cascadeDistances[4];
+        int cascadeCount;
+    };
+    */
+
+    //SHARED UNIFORMS---------------------------------------------------------------------
+    uniform PointLight pointLights[4];
+    uniform int numPointLights;
+    uniform DirLight dirLight;
+
+    uniform float cascadeDistances[3];              //compile time
     uniform int cascadeCount;                       //compile time
-    uniform mat4 cascadeLightSpaceMatrices[5];      //runtime
- 
-    //mesh
-
-    //params/data
-    uniform bool usingModel;
-
-    uniform float farPlane; //for point shadow calculation
-    uniform vec3 baseColor; //Use this if not using a diffuse texture
+    uniform mat4 cascadeLightSpaceMatrices[4];      //runtime
+    uniform float farPlane;                         //for point shadow calculation
     uniform vec3 viewPos;
+    uniform mat4 view;
+
+    //UNIQUE UNIFORMS---------------------------------------------------------------------
+    uniform bool usingModel;
+    uniform bool modelMeshHasNormalMap;
+
+    uniform vec3 baseColor;    //Use this if not using a diffuse texture
     uniform bool usingNormalMap;
     uniform bool usingDiffuseMap;
-    uniform mat4 view;
-        
+    uniform float specularIntensity;
+
     void main()
     {
         vec3 color = vec3(0.0f);
@@ -132,10 +143,16 @@ namespace ShaderSources
         {
             diffuse = pow(texture(texture_diffuse1, TexCoords).rgb, vec3(gamma));   
 
-            normal = texture(texture_normal1, TexCoords).rgb;
-            normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-            normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-            normal = normalize(Normal);
+            if (modelMeshHasNormalMap) //if the current mesh being drawn has a normal map, use that.
+            {
+                normal = texture(texture_normal1, TexCoords).rgb;
+                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+            }
+            else //otherwise use the normals in the vertex data.
+            {
+                normal = normalize(Normal); 
+            }
         }
         else
         {
@@ -339,7 +356,7 @@ namespace ShaderSources
         // combine results
         
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(1.0f));
+        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(specularIntensity));
 
         diffuse  *= attenuation;
         specular *= attenuation;
@@ -371,11 +388,11 @@ namespace ShaderSources
         //spec
         vec3 halfwayDir = normalize(direction + viewDir);
         float spec;
-        spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f); //64 = material shininess
+        spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
 
         // combine results
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(1.0f));
+        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(specularIntensity));
         
         if (!light.castShadows)
         {
@@ -839,12 +856,12 @@ namespace ShaderSources
         //  This simulates moving along +U (x axis in model space). 
         //  going from L (texcoord - 1) to R (texcoord + 1) is total of 2.0 units along the x axis.
         //  Then the change is height (from L to R) is R - L.
-        vec3 tangentU = vec3(2.0 * worldTexelSize.x, height_R - height_L, 0.0); //dU
+        vec3 tangentU = vec3(2.0 * worldTexelSize.x, height_R - height_L, 0.0); //dU (partial with respect to U @ texCoord)
 
         //  This simulates moving along +V (-z axis in model space). 
         //  going from B (texcoord - 1) to T (texcoord + 1) is total of 2.0 units along the -z axis.
         //  Then the change is height (from B to T) is T - B.
-        vec3 tangentV = vec3(0.0, height_T - height_B, -2.0 * worldTexelSize.y); //dV
+        vec3 tangentV = vec3(0.0, height_T - height_B, -2.0 * worldTexelSize.y); //dV (partial with respect to V @ texCoord)
 
         //world space Normal/Tangent
         vec3 normalLocal = cross(tangentU, tangentV);

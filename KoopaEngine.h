@@ -21,8 +21,8 @@ public:
     void EndFrame();
     float GetCurrentFrame();
 
-    void SetCurrentDiffuseTexture(const char* path);
-    void SetCurrentDiffuseTexture(Vec3 col);
+    void SetCurrentDiffuseTexture(const char* path, float specularIntensity = 1.0f);
+    void SetCurrentDiffuseTexture(Vec3 col, float specularIntensity = 1.0f);
     void SetCurrentNormalTexture(const char* path);
     void SetSkybox(const std::vector<const char*>& faces);
 

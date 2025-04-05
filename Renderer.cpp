@@ -21,8 +21,8 @@ Renderer::Renderer()
 
     //Static setup
 	this->SetupVertexBuffers();
-    //                              2               4                      10                  25
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 25.0f, DEFAULT_FAR / 10.0f, DEFAULT_FAR / 3.0f };
+    //                              2                                                      
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f};
     this->drawCalls = {};
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -42,7 +42,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
 
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //3 (4 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
@@ -193,7 +193,7 @@ void Renderer::EndRenderFrame()
         if (d->GetHeightMapPath() == nullptr) //not drawing terrain
         {
             this->lightingShader->use();
-            d->BindTextureProperties(this->lightingShader);
+            d->SendMaterialUniforms(this->lightingShader);
             d->Render(this->lightingShader);
         }   
         else
@@ -201,7 +201,7 @@ void Renderer::EndRenderFrame()
             this->terrainShader->use();
             glActiveTexture(GL_TEXTURE9); // Activate unit 9
             glBindTexture(GL_TEXTURE_2D, this->pathToTerrainVAOandTexture[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
-            d->BindTextureProperties(this->terrainShader);
+            d->SendMaterialUniforms(this->terrainShader);
             d->Render(this->terrainShader);
         }
         glActiveTexture(GL_TEXTURE0); 
@@ -565,15 +565,17 @@ void Renderer::AddToTextureMap(const char* path)
     }
 }
 
-void Renderer::SetCurrentDiffuse(const char* path)
+void Renderer::SetCurrentDiffuse(const char* path, float specularIntensity)
 {
     AddToTextureMap(path);
     this->drawCalls.back()->SetDiffuseMapTexture(this->textureToID[path]);
+    this->drawCalls.back()->SetSpecularIntensity(specularIntensity);
 }
 
-void Renderer::SetCurrentColorDiffuse(Vec3 col)
+void Renderer::SetCurrentColorDiffuse(Vec3 col, float specularIntensity)
 {
     this->drawCalls.back()->SetDiffuseColor(col);
+    this->drawCalls.back()->SetSpecularIntensity(specularIntensity);
 }
 
 void Renderer::SetCurrentNormal(const char* path)

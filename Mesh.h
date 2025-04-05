@@ -44,6 +44,7 @@ public:
     vector<unsigned int> indices;
     vector<Texture>      textures;
     unsigned int VAO;
+    bool hasNormalMap;
 
     // constructor
     Mesh(vector<Vertex> vertices, vector<unsigned int> indices, vector<Texture> textures)
@@ -51,6 +52,14 @@ public:
         this->vertices = vertices;
         this->indices = indices;
         this->textures = textures;
+            
+        this->hasNormalMap = false;
+        for (const auto& tex : this->textures) {
+            if (tex.type == "texture_normal") {
+                this->hasNormalMap = true;
+                break;
+            }
+        }
 
         // now that we have all the required data, set the vertex buffers and its attribute pointers.
         setupMesh();
@@ -70,12 +79,14 @@ public:
             // retrieve texture number (the N in diffuse_textureN)
             string number;
             string name = textures[i].type;
-            if (name == "texture_diffuse")
+            if (name == "texture_diffuse") //assume all models have diffuse map
                 number = std::to_string(diffuseNr++);
             else if (name == "texture_specular")
                 number = std::to_string(specularNr++); // transfer unsigned int to string
             else if (name == "texture_normal")
+            {
                 number = std::to_string(normalNr++); // transfer unsigned int to string
+            }  
             else if (name == "texture_height")
                 number = std::to_string(heightNr++); // transfer unsigned int to string
 
