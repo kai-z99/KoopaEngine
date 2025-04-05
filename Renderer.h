@@ -26,7 +26,7 @@ public:
     void EndRenderFrame();
 
     //Geometry drawing functions
-    void SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
+    void SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
     void ClearScreen(Vec4 col);
     void DrawTriangle(Vec3 pos, Vec4 rotation);
     void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
@@ -90,8 +90,9 @@ private:
             : position(pos), color(col), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
-    void SendPointLightUniforms(unsigned int index);
+    void SendPointLightUniforms(Shader* shader, unsigned int index);
     void InitializePointLights();
+    float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
     //directional
     struct DirLight
     {

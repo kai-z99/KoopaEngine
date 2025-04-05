@@ -71,7 +71,7 @@ void KoopaEngine::BeginFrame()
 
     glm::mat4 view = this->camera->GetViewMatrix();
     glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, DEFAULT_NEAR, DEFAULT_FAR);
-    this->renderer->SetCameraMatrices(view, projection, this->camera->position);
+    this->renderer->SendCameraUniforms(view, projection, this->camera->position);
 
     this->renderer->BeginRenderFrame(); //sets to screen FB
 

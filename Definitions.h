@@ -33,4 +33,3 @@ constexpr unsigned int SPHERE_X_SEGMENTS = 64;
 constexpr unsigned int SPHERE_Y_SEGMENTS = 64;
 
 //cascading shadowmap
-constexpr unsigned int NUM_CASCADES = 3;

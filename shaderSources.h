@@ -112,17 +112,17 @@ namespace ShaderSources
     uniform int numPointLights;
     uniform DirLight dirLight;
 
-    uniform float cascadeDistances[3];              //compile time
-    uniform int cascadeCount;                       //compile time
-    uniform mat4 cascadeLightSpaceMatrices[4];      //runtime
-    uniform float farPlane;                         //for point shadow calculation
-    uniform vec3 viewPos;
-    uniform mat4 view;
+    uniform float cascadeDistances[3];              //set once in constructor
+    uniform int cascadeCount;                       //set once in constructor
+    uniform mat4 cascadeLightSpaceMatrices[4];      //updated every frame in RenderCascadedShadowMap()
+    uniform float farPlane;                         //updated every frame in SendCameraUniforms() (unnessesarily)
+    uniform float pointShadowProjFarPlane;          //for point shadow calculation
+    uniform vec3 viewPos;                           //updated every frame in SendCameraUniforms() 
+    uniform mat4 view;                              //updated every frame in SendCameraUniforms() 
 
-    //UNIQUE UNIFORMS---------------------------------------------------------------------
+    //UNIQUE UNIFORMS (Set by SendUniqueUniforms())-------------------------------------
     uniform bool usingModel;
     uniform bool modelMeshHasNormalMap;
-
     uniform vec3 baseColor;    //Use this if not using a diffuse texture
     uniform bool usingNormalMap;
     uniform bool usingDiffuseMap;
@@ -133,8 +133,7 @@ namespace ShaderSources
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
         float gamma = 2.2;
-        //make sure to convert diffuse to linear space
-            
+
         //Find which textures to use
         vec3 diffuse;
         vec3 normal;
@@ -158,6 +157,7 @@ namespace ShaderSources
         {
             if (usingDiffuseMap)
             {
+                //convert to linear space
                 diffuse = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma));
             }
             else
@@ -272,9 +272,9 @@ namespace ShaderSources
         if (fragDepth > 1.0f) return 0.0f;
             
         //BIAS (0.00035 is optimal NOTTT, no culling)
-        float bias = max(0.0045 * (1.0 - dot(normal, lightDir)), 0.00045); //more bias with more angle.
-        if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
-        else bias *= 1 / (cascadeDistances[layer] * 0.5f);
+        float bias = max(0.00015 * (1.0 - dot(normal, lightDir)), 0.000015); //more bias with more angle.
+        //if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
+        //else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
         float shadow = 0.0f;
 
@@ -301,9 +301,9 @@ namespace ShaderSources
     {
         vec3 lightToFrag = fragPos - lightPos;
 
-        float fragDepth = length(lightToFrag); // [0, farPlane]
+        float fragDepth = length(lightToFrag); // [0, pointShadowProjFarPlane]
         float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag, index)).r;// [0,1]
-        closestDepth *= farPlane; //[0,1] -> [0, farPlane]
+        closestDepth *= pointShadowProjFarPlane; //[0,1] -> [0, pointShadowProjFarPlane]
         
         float shadow = 0.0f;
         float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
@@ -311,12 +311,12 @@ namespace ShaderSources
         //PCF---
         int samples = 20;
         float viewDistance = length(viewPos - fragPos);
-        float diskRadius = (1.0 + (viewDistance / farPlane)) / 25.0; 
+        float diskRadius = (1.0 + (viewDistance / pointShadowProjFarPlane)) / 25.0; 
     
         for(int i = 0; i < samples; ++i)
         {
             float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag + sampleOffsetDirections[i] * diskRadius, index)).r;
-            closestDepth *= farPlane;   // move to [0, farPlane]
+            closestDepth *= pointShadowProjFarPlane;   // move to [0, pointShadowProjFarPlane]
 
             if (fragDepth - bias > closestDepth) shadow += 1.0;
             
@@ -356,7 +356,7 @@ namespace ShaderSources
         // combine results
         
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(specularIntensity));
+        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords).r) : vec3(specularIntensity));
 
         diffuse  *= attenuation;
         specular *= attenuation;
@@ -392,7 +392,7 @@ namespace ShaderSources
 
         // combine results
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords)) : vec3(specularIntensity));
+        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords).r) : vec3(specularIntensity));
         
         if (!light.castShadows)
         {
@@ -632,14 +632,14 @@ namespace ShaderSources
     in vec3 FragPos;
 
     uniform vec3 lightPos;
-    uniform float farPlane;
+    uniform float pointShadowProjFarPlane;
 
     void main()
     {
         float lightDistance = length(FragPos.xyz - lightPos);
     
         // map to [0,1] range by dividing by far_plane
-        lightDistance = lightDistance / farPlane;
+        lightDistance = lightDistance / pointShadowProjFarPlane;
     
         // write this as modified depth
         gl_FragDepth = lightDistance;

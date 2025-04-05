@@ -22,7 +22,7 @@ Renderer::Renderer()
     //Static setup
 	this->SetupVertexBuffers();
     //                              2                                                      
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f};
+    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f };
     this->drawCalls = {};
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -42,7 +42,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
 
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), NUM_CASCADES); //3 (4 matrices)
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), this->cascadeLevels.size()); //3 (4 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
@@ -88,7 +88,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), NUM_CASCADES); //4 (5 matrices)
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), this->cascadeLevels.size()); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
@@ -110,8 +110,19 @@ Renderer::Renderer()
     
     //FBOs AND TEXTURES-------------------------------------------------
  
-    //NOTE: DO THIS AFTER THE POINT LIGHTS ARE INITIALIZED... facepalm
+    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
     this->SetupFramebuffers();
+
+    //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
+    //here in the constructor.
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth);
+    //point
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
+    //cascade
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
 
     GLint maxTessLevel = 0;
     glGetIntegerv(GL_MAX_TESS_GEN_LEVEL, &maxTessLevel);
@@ -161,18 +172,7 @@ void Renderer::EndRenderFrame()
             this->RenderPointShadowMap(i);
         }
     }
-        
-    //BIND SHADOWMAP TEXTURES---
-    //dir
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth); //global binding, not related to shader so cant do it in contructor.
-    //point
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
-    //cascade
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
-
+  
     //DRAW INTO FINAL IMAGE---
     //bind FBO
     glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
@@ -193,15 +193,15 @@ void Renderer::EndRenderFrame()
         if (d->GetHeightMapPath() == nullptr) //not drawing terrain
         {
             this->lightingShader->use();
-            d->SendMaterialUniforms(this->lightingShader);
+            d->SendUniqueUniforms(this->lightingShader); //set the uniforms unique to each draw call
             d->Render(this->lightingShader);
         }   
         else
         {
             this->terrainShader->use();
-            glActiveTexture(GL_TEXTURE9); // Activate unit 9
+            glActiveTexture(GL_TEXTURE9); // Activate unit 9, the heightmap
             glBindTexture(GL_TEXTURE_2D, this->pathToTerrainVAOandTexture[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
-            d->SendMaterialUniforms(this->terrainShader);
+            d->SendUniqueUniforms(this->terrainShader); //set the uniforms unique to each draw call
             d->Render(this->terrainShader);
         }
         glActiveTexture(GL_TEXTURE0); 
@@ -443,6 +443,22 @@ std::vector<glm::mat4> Renderer::GetCascadeMatrices()
     return ret;
 }
 
+/*
+The RenderDoc data strongly supports the hypothesis that the dominant reason the nearest cascade
+is significantly slower (1178 µs) than the farther cascade (128 µs) for a high-vertex model is 
+due to the increased pixel processing load during rasterization and ROP (Raster Output Pipeline) operations.
+
+The VS Invocations (119964) and Rasterized Primitives (39988) are identical for both draw calls. 
+This confirms the same geometry is being processed by the vertex shader and sent to the rasterizer in both cases. 
+Therefore, the difference in performance is not due to vertex shading or triangle setup overhead differences between the cascades.
+The  difference lies in "Samples Passed". The closer cascade resulted in 127,532 samples passed, 
+while the farther cascade only had 39154 samples pass.
+
+"Samples Passed" directly measures the number of pixels on the shadow map that were covered by 
+the model and required a depth value to be written. This is because the model's larger projection onto the near cascade's 
+shadow map forced the GPU to determine coverage, test depth, and write depth values for significantly more
+pixels compared to its smaller projection on the farther cascade's map.
+*/
 void Renderer::RenderCascadedShadowMap()
 {
     glBindFramebuffer(GL_FRAMEBUFFER, this->cascadeShadowMapFBO); //texture array is attached
@@ -456,17 +472,17 @@ void Renderer::RenderCascadedShadowMap()
         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->cascadeShadowMapTextureArrayDepth, 0, i);
         glClear(GL_DEPTH_BUFFER_BIT);
 
+        std::string l = "cascadeLightSpaceMatrices[" + std::to_string(i) + "]";
+
         //send lightspace matrix to lighting shader's array for later use
         this->lightingShader->use();
-        std::string l = "cascadeLightSpaceMatrices[" + std::to_string(i) + "]";
         glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, l.c_str()), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
 
-        //TEMP
+        //give it to terrain shader too
         this->terrainShader->use();
         glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, l.c_str()), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
-
 
         //send lightspace matrix to cascade vertex shader for current use
         this->cascadeShadowShader->use();
@@ -493,8 +509,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
     //create shadow proj matrix base
     float aspect = (float)P_SHADOW_WIDTH / (float)P_SHADOW_HEIGHT;
-    float near = 0.1f;
-    float far = 25.0f;
+    float near = SHADOW_PROJECTION_NEAR;
+    float far = SHADOW_PROJECTION_FAR;
     glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near, far);
 
     //Set shadow transforms
@@ -514,12 +530,11 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     
     //send some uniforms
     this->lightingShader->use();
-    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "farPlane"), far);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "pointShadowProjFarPlane"), far);
     this->terrainShader->use();
-    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "farPlane"), far);
-
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "pointShadowProjFarPlane"), far);
     this->pointShadowShader->use();
-    glUniform1f(glGetUniformLocation(this->pointShadowShader->ID, "farPlane"), far);
+    glUniform1f(glGetUniformLocation(this->pointShadowShader->ID, "pointShadowProjFarPlane"), far);
     glUniform3fv(glGetUniformLocation(this->pointShadowShader->ID, "lightPos"), 1, glm::value_ptr(lightPos));
 
     //Render each face of the cubemap
@@ -696,9 +711,14 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity, bool sh
         this->pointLights[i].intensity = intensity;
         this->pointLights[i].castShadows = shadow;
         
-        this->SendPointLightUniforms(this->currentFramePointLightCount);
+        this->SendPointLightUniforms(this->lightingShader, this->currentFramePointLightCount);
+        this->SendPointLightUniforms(this->terrainShader, this->currentFramePointLightCount);
         this->currentFramePointLightCount++;
+
+        this->lightingShader->use();
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLights"), this->currentFramePointLightCount);
+        this->terrainShader->use();
+        glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLights"), this->currentFramePointLightCount);
     }
     else
     {
@@ -724,38 +744,43 @@ void Renderer::SetAndSendAllLightsToFalse()
     for (int i = 0; i < 4; i++)
     {
         this->pointLights[i].isActive = false;
-        this->SendPointLightUniforms(i);
+        this->SendPointLightUniforms(this->lightingShader, i);
+        this->SendPointLightUniforms(this->terrainShader, i);
     }
     this->currentFramePointLightCount = 0;
+
+    this->lightingShader->use();
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLights"), 0);
+    this->terrainShader->use();
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLights"), 0);
 
     this->dirLight.isActive = false;
     this->SendDirLightUniforms();
 }
 
-void Renderer::SendPointLightUniforms(unsigned int index)
+void Renderer::SendPointLightUniforms(Shader* shader, unsigned int index)
 {
-    this->lightingShader->use();
+    shader->use();
 
     std::string s = "pointLights[" + std::to_string(index) + "].position";
     const char* cs = s.c_str();
-    glUniform3fv(glGetUniformLocation(this->lightingShader->ID, cs), 1, glm::value_ptr(this->pointLights[index].position));
+    glUniform3fv(glGetUniformLocation(shader->ID, cs), 1, glm::value_ptr(this->pointLights[index].position));
 
     s = "pointLights[" + std::to_string(index) + "].color";
     const char* csc = s.c_str();
-    glUniform3fv(glGetUniformLocation(this->lightingShader->ID, csc), 1, glm::value_ptr(this->pointLights[index].color));
+    glUniform3fv(glGetUniformLocation(shader->ID, csc), 1, glm::value_ptr(this->pointLights[index].color));
 
     s = "pointLights[" + std::to_string(index) + "].isActive";
     const char* csa = s.c_str();
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, csa), this->pointLights[index].isActive);
+    glUniform1i(glGetUniformLocation(shader->ID, csa), this->pointLights[index].isActive);
 
     s = "pointLights[" + std::to_string(index) + "].intensity";
     const char* csi = s.c_str();
-    glUniform1f(glGetUniformLocation(this->lightingShader->ID, csi), this->pointLights[index].intensity);
+    glUniform1f(glGetUniformLocation(shader->ID, csi), this->pointLights[index].intensity);
 
     s = "pointLights[" + std::to_string(index) + "].castShadows";
     const char* css = s.c_str();
-    glUniform1f(glGetUniformLocation(this->lightingShader->ID, css), this->pointLights[index].castShadows);
+    glUniform1f(glGetUniformLocation(shader->ID, css), this->pointLights[index].castShadows);
 }
 
 void Renderer::SendDirLightUniforms()
@@ -782,7 +807,8 @@ void Renderer::InitializePointLights()
     for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
         this->pointLights[i] = PointLight();
-        this->SendPointLightUniforms(i);
+        this->SendPointLightUniforms(this->lightingShader, i);
+        this->SendPointLightUniforms(this->terrainShader, i);
     }
 }
 
@@ -792,12 +818,13 @@ void Renderer::InitializeDirLight()
     this->SendDirLightUniforms();
 }
 
-void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
+void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
     this->lightingShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glUniform3fv(glGetUniformLocation(this->lightingShader->ID, "viewPos"), 1, glm::value_ptr(position));
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "farPlane"), DEFAULT_FAR);
 
     if (this->drawDebugLights)
     {
@@ -818,6 +845,8 @@ void Renderer::SetCameraMatrices(const glm::mat4& view, const glm::mat4& project
     this->terrainShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "viewPos"), 1, glm::value_ptr(position));
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "farPlane"), DEFAULT_FAR);
 }
 
 void Renderer::SetupFramebuffers()

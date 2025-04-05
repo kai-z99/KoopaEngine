@@ -64,7 +64,7 @@ void DrawCall::Render(Shader* shader)
 
 
 
-void DrawCall::SendMaterialUniforms(Shader* shader)
+void DrawCall::SendUniqueUniforms(Shader* shader)
 {
     shader->use();
 
@@ -102,12 +102,6 @@ void DrawCall::SendMaterialUniforms(Shader* shader)
     {
         glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 0);
     }
-
-    //TEXTURE2: DIRECTIONAL SHADOWMAP--------------------------------------------------------------
-    //Done in renderer.
-
-    //TEXTURE3: POINT SHADOWMAP
-    //Done in renderer.
 
     glUniform1f(glGetUniformLocation(shader->ID, "specularIntensity"), this->specularIntensity);
 }
