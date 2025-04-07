@@ -1,5 +1,20 @@
 #pragma once
 
+#include "KoopaMath.h"
+
+struct AABB
+{
+    Vec3 min;
+    Vec3 max;
+};
+
+struct MeshData
+{
+    unsigned int VAO;
+    unsigned int vertexCount;
+    AABB aabb;
+};
+
 constexpr float PI = 3.14159265359f;
 
 constexpr unsigned int SCREEN_WIDTH = 800;

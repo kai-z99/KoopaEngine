@@ -2,13 +2,14 @@
 
 #include <vector>
 #include <utility>
+#include "Definitions.h"
 
 namespace VertexBufferSetup
 {
     unsigned int SetupTriangleBuffers();
-    unsigned int SetupSphereBuffers();
-    unsigned int SetupCubeBuffers();
-    unsigned int SetupPlaneBuffers();
+    MeshData SetupSphereBuffers();
+    MeshData SetupCubeBuffers();
+    MeshData SetupPlaneBuffers();
     unsigned int SetupScreenQuadBuffers();
     unsigned int SetupSkyboxBuffers();
     //return <VAO, texture id>

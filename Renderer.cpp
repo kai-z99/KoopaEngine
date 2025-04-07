@@ -141,7 +141,6 @@ Renderer::~Renderer()
 {
     //VBO/VAO
     glDeleteVertexArrays(1, &triangleVAO);
-    glDeleteVertexArrays(1, &cubeVAO);
     glDeleteVertexArrays(1, &screenQuadVAO);
 
     //delete VBOs? reference is lost right now.
@@ -629,13 +628,13 @@ void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->cubeVAO, 36, model));
+    this->drawCalls.push_back(new DrawCall(this->cubeMeshData.VAO, this->cubeMeshData.vertexCount, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
-    this->drawCalls.push_back(new DrawCall(this->planeVAO, 6, model));
+    this->drawCalls.push_back(new DrawCall(this->planeMeshData.VAO, this->planeMeshData.vertexCount, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
     //TODO: How is this not being set to true in the shadow rendering?
 }
@@ -643,7 +642,7 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->sphereVAO, SPHERE_X_SEGMENTS * SPHERE_Y_SEGMENTS * 6, model));
+    this->drawCalls.push_back(new DrawCall(this->sphereMeshData.VAO, this->sphereMeshData.vertexCount, model));
 }
 
 void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)
@@ -681,7 +680,7 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
 void Renderer::DrawLightsDebug()
 {
     this->debugLightShader->use();
-    glBindVertexArray(cubeVAO);
+    glBindVertexArray(this->cubeMeshData.VAO);
 
     for (int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
@@ -869,9 +868,9 @@ void Renderer::SetupFramebuffers()
 void Renderer::SetupVertexBuffers()
 {
     this->triangleVAO = VertexBufferSetup::SetupTriangleBuffers();
-    this->cubeVAO = VertexBufferSetup::SetupCubeBuffers();
-    this->planeVAO = VertexBufferSetup::SetupPlaneBuffers();
-    this->sphereVAO = VertexBufferSetup::SetupSphereBuffers();
+    this->cubeMeshData = VertexBufferSetup::SetupCubeBuffers();
+    this->planeMeshData = VertexBufferSetup::SetupPlaneBuffers();
+    this->sphereMeshData = VertexBufferSetup::SetupSphereBuffers();
     this->screenQuadVAO = VertexBufferSetup::SetupScreenQuadBuffers();
     this->skyboxVAO = VertexBufferSetup::SetupSkyboxBuffers();
 }

@@ -139,9 +139,9 @@ private:
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
     unsigned int triangleVAO;
-    unsigned int cubeVAO;
-    unsigned int sphereVAO;
-    unsigned int planeVAO;
+    MeshData cubeMeshData;
+    MeshData sphereMeshData;
+    MeshData planeMeshData;
     unsigned int screenQuadVAO;
     unsigned int skyboxVAO;
     unsigned int terrainVAO;

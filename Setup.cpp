@@ -3,8 +3,40 @@
 #include <glad/glad.h>
 #include <stb_image.h>
 
-#include "Definitions.h"
 #include <iostream>
+
+static inline AABB GetAABB(float* vertexData, unsigned int vertexCount, unsigned int stride)
+{
+    //Calcuate AABB;
+    Vec3 minBounds = Vec3(std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max());
+
+    Vec3 maxBounds = Vec3(std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest());
+
+    for (unsigned int i = 0; i < vertexCount; i++)
+    {
+        unsigned int index = stride * i;
+        Vec3 pos = Vec3(vertexData[index], vertexData[index + 1], vertexData[index + 2]);
+
+        minBounds.x = std::min(pos.x, minBounds.x);
+        minBounds.y = std::min(pos.y, minBounds.y);
+        minBounds.z = std::min(pos.z, minBounds.z);
+
+        maxBounds.x = std::max(pos.x, maxBounds.x);
+        maxBounds.y = std::max(pos.y, maxBounds.y);
+        maxBounds.z = std::max(pos.z, maxBounds.z);
+    }
+
+    AABB aabb;
+    aabb.max = maxBounds;
+    aabb.min = minBounds;
+
+    return aabb;
+}
+
 
 namespace VertexBufferSetup
 {
@@ -38,7 +70,7 @@ namespace VertexBufferSetup
 		return VAO;
 	}
 
-    unsigned int SetupCubeBuffers()
+    MeshData SetupCubeBuffers()
     {
         unsigned int VAO, VBO;
 
@@ -124,10 +156,15 @@ namespace VertexBufferSetup
 
         glBindVertexArray(0);
 
-        return VAO;
+        MeshData result;
+        result.vertexCount = 36;
+        result.VAO = VAO;
+        result.aabb = GetAABB(cubeVertices, result.vertexCount, 11);
+
+        return result;
     }
 
-    unsigned int SetupSphereBuffers()
+    MeshData SetupSphereBuffers()
     {
         unsigned int VAO, VBO;
 
@@ -232,11 +269,16 @@ namespace VertexBufferSetup
 
         glBindVertexArray(0);
 
-        return VAO;
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = (unsigned int)(vertices.size() / 11); //SPHERE_X_SEGMENTS * SPHERE_Y_SEGMENTS * 6
+        result.aabb = GetAABB(&vertices[0], result.vertexCount, 11);
+
+        return result;
     }
 
 
-    unsigned int SetupPlaneBuffers()
+    MeshData SetupPlaneBuffers()
     {
         unsigned int VAO, VBO;
 
@@ -272,7 +314,12 @@ namespace VertexBufferSetup
 
         glBindVertexArray(0);
 
-        return VAO;
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = 6;
+        result.aabb = GetAABB(planeVertices, result.vertexCount, 11);
+
+        return result;
     }
 
     unsigned int SetupScreenQuadBuffers()
