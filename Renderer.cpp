@@ -623,19 +623,19 @@ static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
-    this->drawCalls.push_back(new DrawCall(this->triangleMeshData.VAO, 3, model));
+    this->drawCalls.push_back(new DrawCall(this->triangleMeshData, model));
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->cubeMeshData.VAO, this->cubeMeshData.vertexCount, model));
+    this->drawCalls.push_back(new DrawCall(this->cubeMeshData, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
-    this->drawCalls.push_back(new DrawCall(this->planeMeshData.VAO, this->planeMeshData.vertexCount, model));
+    this->drawCalls.push_back(new DrawCall(this->planeMeshData, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
     //TODO: How is this not being set to true in the shadow rendering?
 }
@@ -643,7 +643,7 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->sphereMeshData.VAO, this->sphereMeshData.vertexCount, model));
+    this->drawCalls.push_back(new DrawCall(this->sphereMeshData, model));
 }
 
 void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)
@@ -674,9 +674,7 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
     }
 
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    unsigned int VAO = this->pathToTerrainVAOandTexture[path].first.VAO;
-    unsigned int vertexCount = this->pathToTerrainVAOandTexture[path].first.vertexCount;
-    this->drawCalls.push_back(new DrawCall(VAO, vertexCount, model, GL_PATCHES));
+    this->drawCalls.push_back(new DrawCall(this->pathToTerrainVAOandTexture[path].first, model, GL_PATCHES));
     this->drawCalls.back()->SetHeightMapPath(path);
 }
 

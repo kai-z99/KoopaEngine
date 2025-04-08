@@ -5,14 +5,15 @@
 #include "Model.h"
 
 
-DrawCall::DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model, GLenum primitive)
+DrawCall::DrawCall(MeshData meshData, const glm::mat4& model, GLenum primitive)
 {
     this->model = nullptr; //if this stays null, we are not drawing a model.
     this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
 
     //general data
-    this->VAO = VAO;
-    this->vertexCount = vertexCount;
+    this->VAO = meshData.VAO;
+    this->vertexCount = meshData.vertexCount;
+    this->aabb = meshData.aabb;
     this->modelMatrix = model;
     this->primitive = primitive;
 

@@ -3,6 +3,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glad/glad.h>
 #include "KoopaMath.h"
+#include "Definitions.h"
 
 class Shader;
 class Model;
@@ -10,7 +11,7 @@ class Model;
 class DrawCall
 {
 public:
-	DrawCall(unsigned int VAO, unsigned int vertexCount, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
+	DrawCall(MeshData meshData, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
 	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
@@ -30,9 +31,10 @@ public:
 	void SetHeightMapPath(const char* path);
 
 private:
-	//General data
+	//Mesh Data
 	unsigned int VAO;
 	unsigned int vertexCount;
+	AABB aabb;
 	glm::mat4 modelMatrix;
 	GLenum primitive;
 
