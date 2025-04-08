@@ -6,14 +6,14 @@
 
 namespace VertexBufferSetup
 {
-    unsigned int SetupTriangleBuffers();
+    MeshData SetupTriangleBuffers();
     MeshData SetupSphereBuffers();
     MeshData SetupCubeBuffers();
     MeshData SetupPlaneBuffers();
-    unsigned int SetupScreenQuadBuffers();
-    unsigned int SetupSkyboxBuffers();
+    MeshData SetupScreenQuadBuffers();
+    MeshData SetupSkyboxBuffers();
     //return <VAO, texture id>
-    std::pair<unsigned int, unsigned int> SetupTerrainBuffers(const char* path);
+    std::pair<MeshData, unsigned int> SetupTerrainBuffers(const char* path);
 }
 
 namespace FramebufferSetup

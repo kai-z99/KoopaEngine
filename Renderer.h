@@ -138,14 +138,14 @@ private:
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();
-    unsigned int triangleVAO;
+    MeshData triangleMeshData;
     MeshData cubeMeshData;
     MeshData sphereMeshData;
     MeshData planeMeshData;
-    unsigned int screenQuadVAO;
-    unsigned int skyboxVAO;
+    MeshData screenQuadMeshData;
+    MeshData skyboxMeshData;
     unsigned int terrainVAO;
-    std::unordered_map<const char*, std::pair<unsigned int, unsigned int>> pathToTerrainVAOandTexture; //path : <VAO, texture>
+    std::unordered_map<const char*, std::pair<MeshData, unsigned int>> pathToTerrainVAOandTexture; //path : <Meshdata, texture>
 
     //FRAMEBUFFERS
     void SetupFramebuffers();

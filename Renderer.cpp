@@ -42,7 +42,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
 
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), this->cascadeLevels.size()); //3 (4 matrices)
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), (unsigned int)this->cascadeLevels.size()); //3 (4 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
@@ -88,7 +88,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
     //Stuff for cascade shadows
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), this->cascadeLevels.size()); //4 (5 matrices)
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), (unsigned int)this->cascadeLevels.size()); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
     {
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
@@ -140,14 +140,15 @@ Renderer::Renderer()
 Renderer::~Renderer()
 {
     //VBO/VAO
-    glDeleteVertexArrays(1, &triangleVAO);
-    glDeleteVertexArrays(1, &screenQuadVAO);
+    glDeleteVertexArrays(1, &this->triangleMeshData.VAO);
+    glDeleteVertexArrays(1, &this->screenQuadMeshData.VAO);
 
     //delete VBOs? reference is lost right now.
 
     delete this->lightingShader;
     delete this->debugLightShader;
     delete this->screenShader;
+
     for (DrawCall* d : this->drawCalls) delete d;
 }
 
@@ -234,7 +235,7 @@ void Renderer::DrawFinalQuad()
     this->screenShader->use();
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    glBindVertexArray(this->screenQuadVAO); //whole screen
+    glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
     glActiveTexture(GL_TEXTURE0); //0: hdrBuffer in shader
     glBindTexture(GL_TEXTURE_2D, this->hdrColorBuffers[0]); // 0:hdrTextureRGBA...HDRframebuffer texture to hdrBuffer in shader
     glActiveTexture(GL_TEXTURE1); //1: blurBuffer in shader
@@ -275,7 +276,7 @@ void Renderer::BlurBrightScene()
         glActiveTexture(GL_TEXTURE0);   //          BrightScene
         glBindTexture(GL_TEXTURE_2D, first ? this->hdrColorBuffers[1] : this->twoPassBlurTexturesRGBA[!horizontal]);
         
-        glBindVertexArray(this->screenQuadVAO);
+        glBindVertexArray(this->screenQuadMeshData.VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         horizontal = !horizontal;
@@ -291,7 +292,7 @@ void Renderer::DrawSkybox()
     glDepthFunc(GL_LEQUAL);
     unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
     glDrawBuffers(1, attachments);
-    glBindVertexArray(this->skyboxVAO);
+    glBindVertexArray(this->skyboxMeshData.VAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->currentSkyboxTexture);
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -622,7 +623,7 @@ static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
-    this->drawCalls.push_back(new DrawCall(this->triangleVAO, 3, model));
+    this->drawCalls.push_back(new DrawCall(this->triangleMeshData.VAO, 3, model));
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
@@ -673,7 +674,9 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
     }
 
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->pathToTerrainVAOandTexture[path].first, 4 * 20 * 20, model, GL_PATCHES));
+    unsigned int VAO = this->pathToTerrainVAOandTexture[path].first.VAO;
+    unsigned int vertexCount = this->pathToTerrainVAOandTexture[path].first.vertexCount;
+    this->drawCalls.push_back(new DrawCall(VAO, vertexCount, model, GL_PATCHES));
     this->drawCalls.back()->SetHeightMapPath(path);
 }
 
@@ -867,12 +870,12 @@ void Renderer::SetupFramebuffers()
 
 void Renderer::SetupVertexBuffers()
 {
-    this->triangleVAO = VertexBufferSetup::SetupTriangleBuffers();
+    this->triangleMeshData = VertexBufferSetup::SetupTriangleBuffers();
     this->cubeMeshData = VertexBufferSetup::SetupCubeBuffers();
     this->planeMeshData = VertexBufferSetup::SetupPlaneBuffers();
     this->sphereMeshData = VertexBufferSetup::SetupSphereBuffers();
-    this->screenQuadVAO = VertexBufferSetup::SetupScreenQuadBuffers();
-    this->skyboxVAO = VertexBufferSetup::SetupSkyboxBuffers();
+    this->screenQuadMeshData = VertexBufferSetup::SetupScreenQuadBuffers();
+    this->skyboxMeshData = VertexBufferSetup::SetupSkyboxBuffers();
 }
 
 /*

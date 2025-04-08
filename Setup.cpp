@@ -40,7 +40,7 @@ static inline AABB GetAABB(float* vertexData, unsigned int vertexCount, unsigned
 
 namespace VertexBufferSetup
 {
-	unsigned int SetupTriangleBuffers()
+	MeshData SetupTriangleBuffers()
 	{
         unsigned int VAO, VBO;
 
@@ -67,7 +67,12 @@ namespace VertexBufferSetup
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-		return VAO;
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = 3;
+        result.aabb = GetAABB(vertices, result.vertexCount, 3);
+
+        return result;
 	}
 
     MeshData SetupCubeBuffers()
@@ -322,7 +327,7 @@ namespace VertexBufferSetup
         return result;
     }
 
-    unsigned int SetupScreenQuadBuffers()
+    MeshData SetupScreenQuadBuffers()
     {
         unsigned int VAO, VBO;
 
@@ -349,11 +354,16 @@ namespace VertexBufferSetup
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
         glBindVertexArray(0);
 
-        return VAO;
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = 6;
+        result.aabb = GetAABB(quadVertices, result.vertexCount, 4); //dont really need this but for consitancy
+
+        return result;
 
     }
 
-    unsigned int SetupSkyboxBuffers()
+    MeshData SetupSkyboxBuffers()
     {
         unsigned int VAO, VBO;
 
@@ -414,10 +424,15 @@ namespace VertexBufferSetup
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
         glBindVertexArray(0);
 
-        return VAO;
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = 36;
+        result.aabb = GetAABB(skyboxVertices, result.vertexCount, 3);
+
+        return result;
     }
 
-    std::pair<unsigned int, unsigned int> SetupTerrainBuffers(const char* path)
+    std::pair<MeshData, unsigned int> SetupTerrainBuffers(const char* path)
     {
         // load and create a texture
         // -------------------------
@@ -526,7 +541,12 @@ namespace VertexBufferSetup
 
         glBindVertexArray(0);
 
-        return {VAO, heightMapTexture};
+        MeshData result;
+        result.VAO = VAO;
+        result.vertexCount = rez * rez * 4;
+        result.aabb = GetAABB(&vertices[0], result.vertexCount, 5);
+
+        return {result, heightMapTexture};
     }
 }
 
