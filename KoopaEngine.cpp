@@ -93,19 +93,34 @@ float KoopaEngine::GetCurrentFrame()
     return this->currentFrame;
 }
 
-void KoopaEngine::SetCurrentDiffuseTexture(const char* path, float specularIntensity)
+void KoopaEngine::ResetMaterial()
 {
-    this->renderer->SetCurrentDiffuse(path, specularIntensity);
+    this->renderer->ResetMaterial();
 }
 
-void KoopaEngine::SetCurrentDiffuseTexture(Vec3 col, float specularIntensity)
+void KoopaEngine::SetCurrentDiffuseTexture(const char* path)
 {
-    this->renderer->SetCurrentColorDiffuse(col, specularIntensity);
+    this->renderer->SetCurrentDiffuse(path);
+}
+
+void KoopaEngine::SetCurrentDiffuseTexture(Vec3 col)
+{
+    this->renderer->SetCurrentBaseColor(col);
 }
 
 void KoopaEngine::SetCurrentNormalTexture(const char* path)
 {
     this->renderer->SetCurrentNormal(path);
+}
+
+void KoopaEngine::SetCurrentSpecularTexture(const char* path)
+{
+    this->renderer->SetCurrentSpecular(path);
+}
+
+void KoopaEngine::SetCurrentBaseSpecular(float specular)
+{
+    this->renderer->SetBaseSpecular(specular);
 }
 
 void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)

@@ -21,9 +21,13 @@ public:
     void EndFrame();
     float GetCurrentFrame();
 
-    void SetCurrentDiffuseTexture(const char* path, float specularIntensity = 1.0f);
-    void SetCurrentDiffuseTexture(Vec3 col, float specularIntensity = 1.0f);
+    void ResetMaterial();
+    void SetCurrentDiffuseTexture(const char* path);
+    void SetCurrentDiffuseTexture(Vec3 col);
     void SetCurrentNormalTexture(const char* path);
+    void SetCurrentSpecularTexture(const char* path);
+    void SetCurrentBaseSpecular(float specular);
+
     void SetSkybox(const std::vector<const char*>& faces);
 
     void ClearScreen(Vec4 color);

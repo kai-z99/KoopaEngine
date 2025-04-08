@@ -1,11 +1,10 @@
 #include "pch.h"
 #include "DrawCall.h"
 #include "Shader.h"
-#include "Constants.h"
 #include "Model.h"
 
 
-DrawCall::DrawCall(MeshData meshData, const glm::mat4& model, GLenum primitive)
+DrawCall::DrawCall(MeshData meshData, Material material, const glm::mat4& model, GLenum primitive)
 {
     this->model = nullptr; //if this stays null, we are not drawing a model.
     this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
@@ -21,12 +20,7 @@ DrawCall::DrawCall(MeshData meshData, const glm::mat4& model, GLenum primitive)
     this->usingCulling = true;
 
     //Material properties
-    this->usingDiffuseMap = false;
-    this->usingNormalMap = false;
-    this->diffuseMapTexture = -1;
-    this->normalMapTexture = -1;
-    this->diffuseColor = noTexturePink; //missingTexture color
-    this->specularIntensity = 1.0f;     //default depculat intensity if setdiffuse is never called
+    this->material = material;
 }
 
 DrawCall::DrawCall(Model* m, const glm::mat4 model)
@@ -63,9 +57,7 @@ void DrawCall::Render(Shader* shader)
     
 }
 
-
-
-void DrawCall::SendUniqueUniforms(Shader* shader)
+void DrawCall::BindMaterialUniforms(Shader* shader)
 {
     shader->use();
 
@@ -79,55 +71,36 @@ void DrawCall::SendUniqueUniforms(Shader* shader)
         glUniform1i(glGetUniformLocation(shader->ID, "usingModel"), 0);
     }
 
+    // Send base values. (these always exist)
+    Vec3 baseColor = this->material.baseColor;
+    glUniform3fv(glGetUniformLocation(shader->ID, "material.baseColor"), 1, glm::value_ptr(glm::vec3(baseColor.r, baseColor.g, baseColor.b)));
+    glUniform1f(glGetUniformLocation(shader->ID, "material.baseSpecular"), this->material.baseSpecular);
+
+    //Send usingX flags
+    glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), this->material.useDiffuseMap);
+    glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), this->material.useNormalMap);
+    glUniform1i(glGetUniformLocation(shader->ID, "usingSpecularMap"), this->material.useSpecularMap);
+
     //TEXTURE0: DIFFUSEMAP------------------------------------------------------------------------
-    glActiveTexture(GL_TEXTURE0);
-    if (this->usingDiffuseMap)
+    if (this->material.useDiffuseMap)
     {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), 1);
-        glBindTexture(GL_TEXTURE_2D, this->diffuseMapTexture); //in fs: currentDiffuseMap = 0
-    }
-    else
-    {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), 0);
-        glUniform3fv(glGetUniformLocation(shader->ID, "baseColor"), 1, glm::value_ptr(glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b)));
+        glActiveTexture(GL_TEXTURE0); //in fs1: material.diffuse is 0
+        glBindTexture(GL_TEXTURE_2D, this->material.diffuse); 
     }
 
     //TEXTURE1: NORMALMAP-------------------------------------------------------------------------
-    glActiveTexture(GL_TEXTURE1);
-    if (this->usingNormalMap)
+    if (this->material.useNormalMap)
     {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 1);
-        glBindTexture(GL_TEXTURE_2D, this->normalMapTexture); //in fs: currentNormalMap = 1
-    }
-    else
-    {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), 0);
+        glActiveTexture(GL_TEXTURE1); //in fs1: material.normal is 1
+        glBindTexture(GL_TEXTURE_2D, this->material.normal);
     }
 
-    glUniform1f(glGetUniformLocation(shader->ID, "specularIntensity"), this->specularIntensity);
-}
-
-void DrawCall::SetNormalMapTexture(unsigned int id)
-{
-    this->normalMapTexture = id;
-    this->usingNormalMap = true;
-}
-
-void DrawCall::SetDiffuseMapTexture(unsigned int id)
-{
-    this->diffuseMapTexture = id;
-    this->usingDiffuseMap = true;
-}
-
-void DrawCall::SetSpecularIntensity(float shiny)
-{
-    this->specularIntensity = shiny;
-}
-
-void DrawCall::SetDiffuseColor(Vec3 col)
-{
-    this->diffuseColor = col;
-    this->usingDiffuseMap = false;
+    //TEXTURE2: SPECULARMAP-----------------------------------------------------------------------
+    if (this->material.useSpecularMap)
+    {
+        glActiveTexture(GL_TEXTURE2); //in fs1: material.specular is 2
+        glBindTexture(GL_TEXTURE_2D, this->material.specular);
+    }
 }
 
 void DrawCall::SetCulling(bool enabled)

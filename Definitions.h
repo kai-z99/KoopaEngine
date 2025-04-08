@@ -15,6 +15,23 @@ struct MeshData
     AABB aabb;
 };
 
+struct Material
+{
+    //the id of diffuse material texture
+    unsigned int diffuse;
+    Vec3 baseColor;
+    bool useDiffuseMap;
+
+    //id
+    unsigned int normal;
+    bool useNormalMap;
+
+    //id
+    unsigned int specular;
+    float baseSpecular;
+    bool useSpecularMap;
+};
+
 constexpr float PI = 3.14159265359f;
 
 constexpr unsigned int SCREEN_WIDTH = 800;

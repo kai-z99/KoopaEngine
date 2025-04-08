@@ -11,18 +11,14 @@ class Model;
 class DrawCall
 {
 public:
-	DrawCall(MeshData meshData, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
+	DrawCall(MeshData meshData, Material material, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
 	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
 	void Render(Shader* shader);
 
 	//For "fs1" lighting shader
-	void SendUniqueUniforms(Shader* shader);
-	void SetNormalMapTexture(unsigned int id);
-	void SetDiffuseMapTexture(unsigned int id);
-	void SetSpecularIntensity(float shiny);
-	void SetDiffuseColor(Vec3 col);
+	void BindMaterialUniforms(Shader* shader);
 
 	//General flags
 	void SetCulling(bool enabled);
@@ -39,12 +35,7 @@ private:
 	GLenum primitive;
 
 	//Material
-	bool usingDiffuseMap;
-	bool usingNormalMap;
-	unsigned int diffuseMapTexture;
-	Vec3 diffuseColor;
-	unsigned int normalMapTexture;
-	float specularIntensity;
+	Material material;
 
 	//for terrain
 	const char* heightMapPath;

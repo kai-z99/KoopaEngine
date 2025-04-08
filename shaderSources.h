@@ -43,7 +43,7 @@ namespace ShaderSources
     )";
 
     const char* fs1 = R"(
-    #version 420 core
+   #version 420 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
     layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
@@ -54,7 +54,8 @@ namespace ShaderSources
         bool isActive;
         bool castShadows;
     };  
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, int index);
+    vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, 
+                vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index);
  
     struct DirLight {
         vec3 direction;
@@ -63,23 +64,32 @@ namespace ShaderSources
         bool isActive;    
         bool castShadows;
     };
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor);
+    vec3 CalcDirLight(DirLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular);
     
-    float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir);
     float CascadeShadowCalculation(vec3 fragPos, vec3 normal, vec3 lightDir);
     float PointShadowCalculation(vec3 fragPos, vec3 lightPos, int index);
+
+    struct Material
+    {
+        sampler2D diffuse; //falls back to baseColor. Texture 0
+        vec3 baseColor; 
+
+        sampler2D normal; //may or may not exist. falls back to vertex data normals. Texture 1
+
+        sampler2D specular; //may or may not exist. falls back to baseSpecular Texture 2
+        float baseSpecular; //[0-1] hard scalar for specular
+    };
         
     //IN VARIABLES--------------------------------------------------------------------------------
     in vec2 TexCoords;
     in vec3 Normal;
     in vec3 FragPos;
     in mat3 TBN;
-    in vec4 FragPosDirLightSpace;
         
     //SAMPLERS------------------------------------------------------------------------------------
-    uniform sampler2D currentDiffuse;                //0
-    uniform sampler2D currentNormalMap;              //1
-    uniform sampler2D dirShadowMap;                  //2
+    //material.diffuse;                              //0
+    //material.normal;                               //1
+    //material.specular;                             //2
     uniform samplerCubeArray pointShadowMapArray;    //3
     uniform sampler2DArray cascadeShadowMaps;        //4
     uniform sampler2D texture_diffuse1;              //5-8
@@ -88,25 +98,6 @@ namespace ShaderSources
     uniform sampler2D texture_height1;               //5-8
     //TERRAIN TEXTURE                                //9
     
-    //TODO: If using UBOs.
-    /*
-    //SHARED UNIFORMS------------------------------------------------------------------------------------
-    layout (std140, binding = 0) uniform SharedFSData
-    {
-        mat4 view;
-        vec3 viewPos;
-        float farPlane;
-    
-        DirLight dirLight;
-        PointLight pointLights[4];
-        int numPointLights;
-
-        mat4 cascadeLightSpaceMatrices[5];
-        float cascadeDistances[4];
-        int cascadeCount;
-    };
-    */
-
     //SHARED UNIFORMS---------------------------------------------------------------------
     uniform PointLight pointLights[4];
     uniform int numPointLights;
@@ -120,70 +111,41 @@ namespace ShaderSources
     uniform vec3 viewPos;                           //updated every frame in SendCameraUniforms() 
     uniform mat4 view;                              //updated every frame in SendCameraUniforms() 
 
-    //UNIQUE UNIFORMS (Set by SendUniqueUniforms())-------------------------------------
-    uniform bool usingModel;
+    //UNIQUE UNIFORMS --------------------------------------------------------------------
+    //model properties (usingModel set by SendMaterialUniforms(), flags set in model creation)
+    uniform bool usingModel; //false means using material
+    uniform bool modelMeshHasDiffuseMap;
     uniform bool modelMeshHasNormalMap;
-    uniform vec3 baseColor;    //Use this if not using a diffuse texture
-    uniform bool usingNormalMap;
+    uniform bool modelMeshHasSpecularMap;
+    //material properties (Set by SendMaterialUniforms())
+    uniform Material material;
     uniform bool usingDiffuseMap;
-    uniform float specularIntensity;
+    uniform bool usingNormalMap;
+    uniform bool usingSpecularMap;
+
+    vec3 ChooseDiffuse();
+    vec3 ChooseNormal();
+    vec3 ChooseSpecular();
+
+    const float gamma = 2.2;
 
     void main()
     {
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
-        float gamma = 2.2;
-
+    
         //Find which textures to use
-        vec3 diffuse;
-        vec3 normal;
+        vec3 diffuse = ChooseDiffuse();
+        vec3 normal = ChooseNormal();
+        vec3 specular = ChooseSpecular();
 
-        if (usingModel)
-        {
-            diffuse = pow(texture(texture_diffuse1, TexCoords).rgb, vec3(gamma));   
-
-            if (modelMeshHasNormalMap) //if the current mesh being drawn has a normal map, use that.
-            {
-                normal = texture(texture_normal1, TexCoords).rgb;
-                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-            }
-            else //otherwise use the normals in the vertex data.
-            {
-                normal = normalize(Normal); 
-            }
-        }
-        else
-        {
-            if (usingDiffuseMap)
-            {
-                //convert to linear space
-                diffuse = pow(texture(currentDiffuse, TexCoords).rgb, vec3(gamma));
-            }
-            else
-            {
-                diffuse = baseColor;
-            }
-
-            if (usingNormalMap)
-            {
-                normal = texture(currentNormalMap, TexCoords).rgb;
-                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-            }
-            else
-            {
-                normal = normalize(Normal);
-            }                
-        }
-            
         //LIGHTS
         for (int i = 0; i < numPointLights; i++)
         {
-            color += CalcPointLight(pointLights[i], normal, FragPos, viewDir, diffuse, i);
+            color += CalcPointLight(pointLights[i], FragPos, viewDir, diffuse, normal, specular, i);
         }
 
-        color += CalcDirLight(dirLight, normal, FragPos, viewDir, diffuse);
+        color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
     
         //Ambient lighting
         vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse; 
@@ -195,49 +157,7 @@ namespace ShaderSources
         if (brightness > 1.0) BrightColor = vec4(color, 1.0f);
         else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
-    
-    float DirShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
-    {
-        //note: we only care about z comp of fragPosLightSpace.
-        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //perspective divide to convert to [-1,1]. 
-        //Now: {[-1,1], [-1,1], [-1,1]} (if in frustum, AKA will show in the shadow snapshot, not clipped out)
 
-        projCoords = projCoords * 0.5 + 0.5;  
-        //Now: {[0,1] , [0,1], [0,1]} (if in frustum, AKA will show in the shadow snapshot, not clipped out)
-            
-        float fragDepth = projCoords.z;
-
-        float closestDepth = texture(dirShadowMap, projCoords.xy).r; //note: this can sample outside [0,1] if its outsidde the frag was outside frustum. (clipped out)
-        //if it does, it return 1.0f due to the wrapping method we set.
-            
-
-        if (fragDepth > 1.0f) return 0.0f; //Outside the far plane
-
-        float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.00125); //more bias with more angle.
-        float shadow = 0.0f;
-
-        //PCF---
-        vec2 texelSize = 1.0f / textureSize(dirShadowMap, 0);
-        //This is like a convolution matrix.
-        for(int x = -1; x <= 1; ++x)
-        {
-            for(int y = -1; y <= 1; ++y)
-            {
-                float pcfDepth = texture(dirShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; //closest depth of the surronding pixel
-                shadow += fragDepth - bias > pcfDepth ? 1.0 : 0.0;   //if fragdepth > closest depth of near pixel, add more shadow  
-                //note: think of what happen ShadowCalcultion samples a pixel thats on the edge of a box. This convolution will add some contribution
-                //for the texels that are on the box, but wont add contribution to the ones that are off the edge of the box. making softer shadow. (its an edge as it should be)
-                //Visualization: convert to lightSpace, 9 lasers in a square at the pixel being sampled. Lasers that hit before are add shadow,
-                //lasers that hit behind sample pixel dont contribute to shadow.
-            }    
-        }
-        shadow /= 9.0;
-    
-        //shadow = fragDepth - bias > closestDepth ? 1.0f : 0.0f;
-
-        return shadow;  
-    }
-        
     const vec3 sampleOffsetDirections[20] = vec3[]
     (
         vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
@@ -329,9 +249,7 @@ namespace ShaderSources
         return shadow;
     }
 
-        
-
-    vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, int index)
+    vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index)
     {
     
         if (light.isActive == false)
@@ -354,9 +272,8 @@ namespace ShaderSources
         float attenuation = 1.0 / (distance * distance); //quadratic attenuation
 
         // combine results
-        
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords).r) : vec3(specularIntensity));
+        vec3 specular = light.intensity * light.color  * spec * baseSpecular;
 
         diffuse  *= attenuation;
         specular *= attenuation;
@@ -372,7 +289,7 @@ namespace ShaderSources
         }
     } 
 
-    vec3 CalcDirLight(DirLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor)
+    vec3 CalcDirLight(DirLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular)
     {
         //return normal;
         if (light.isActive == false)
@@ -392,7 +309,7 @@ namespace ShaderSources
 
         // combine results
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * (usingModel ? vec3(texture(texture_specular1, TexCoords).r) : vec3(specularIntensity));
+        vec3 specular = light.intensity * light.color  * spec * baseSpecular;
         
         if (!light.castShadows)
         {
@@ -405,6 +322,93 @@ namespace ShaderSources
             return (1.0 - shadow) * (diffuse + specular);
         }
     }
+
+    //Helper functions 
+    vec3 ChooseDiffuse()
+    {
+        if (usingModel)
+        {
+            if (modelMeshHasDiffuseMap)
+            {
+                return pow(texture(texture_diffuse1, TexCoords).rgb, vec3(gamma));  
+            }
+            else
+            {
+                return vec3(1.0f);
+            }
+        }
+        else
+        {
+            if (usingDiffuseMap)
+            {
+                //convert to linear space
+                return pow(texture(material.diffuse, TexCoords).rgb, vec3(gamma));
+            }
+            else
+            {
+                return material.baseColor;
+            }
+        }
+    }
+
+    vec3 ChooseNormal()
+    {
+        if (usingModel)
+        {
+            if (modelMeshHasNormalMap) //if the current mesh being drawn has a normal map, use that.
+            {
+                vec3 normal = texture(texture_normal1, TexCoords).rgb;
+                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+                return normal;
+            }
+            else //otherwise use the normals in the vertex data.
+            {
+                return normalize(Normal); 
+            }
+        }
+        else
+        {
+            if (usingNormalMap)
+            {
+                vec3 normal = texture(material.normal, TexCoords).rgb;
+                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+                return normal;
+            }
+            else
+            {
+                return normalize(Normal);
+            }  
+        }
+    }
+
+    vec3 ChooseSpecular()
+    {
+        if (usingModel)
+        {
+            if (modelMeshHasSpecularMap)
+            {
+                return vec3(texture(texture_specular1, TexCoords).r);
+            }
+            else
+            {
+                return vec3(1.0f);
+            }
+        }
+        else
+        {
+            if (usingSpecularMap)
+            {
+                return vec3(texture(material.specular, TexCoords).r);
+            }
+            else
+            {
+                return vec3(material.baseSpecular);
+            }
+        }
+    }
+
     )";
 
     const char* fsLight = R"(

@@ -66,13 +66,13 @@ uniform float pointShadowProjFarPlane;          //for point shadow calculation
 uniform vec3 viewPos;                           //updated every frame in SendCameraUniforms() 
 uniform mat4 view;                              //updated every frame in SendCameraUniforms() 
 
-//UNIQUE UNIFORMS (Set by SendUniqueUniforms())-------------------------------------
-//model
-uniform bool usingModel;
+//UNIQUE UNIFORMS --------------------------------------------------------------------
+//model properties (usingModel set by SendMaterialUniforms(), flags set in model creation)
+uniform bool usingModel; //false means using material
 uniform bool modelMeshHasDiffuseMap;
 uniform bool modelMeshHasNormalMap;
 uniform bool modelMeshHasSpecularMap;
-//material
+//material properties (Set by SendMaterialUniforms())
 uniform Material material;
 uniform bool usingDiffuseMap;
 uniform bool usingNormalMap;

@@ -36,9 +36,12 @@ public:
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Modification functions
-    void SetCurrentDiffuse(const char* path, float specularIntensity);
-    void SetCurrentColorDiffuse(Vec3 col, float specularIntensity);
+    void ResetMaterial();
+    void SetCurrentDiffuse(const char* path);
+    void SetCurrentBaseColor(Vec3 col);
     void SetCurrentNormal(const char* path);
+    void SetCurrentSpecular(const char* path);
+    void SetBaseSpecular(float spec);
     void SetSkybox(const std::vector<const char*>& faces);
     void SetExposure(float exposure);
 
@@ -59,9 +62,9 @@ private:
     Shader* blurShader;
     Shader* terrainShader;
 
-    //TEXTURES
-    unsigned int currentDiffuseTexture;
-    unsigned int currentNormalMapTexture;
+    //TEXTURES/MATERIAL
+    Material currentMaterial;
+
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
     unsigned int currentSkyboxTexture;
@@ -145,7 +148,7 @@ private:
     MeshData screenQuadMeshData;
     MeshData skyboxMeshData;
     unsigned int terrainVAO;
-    std::unordered_map<const char*, std::pair<MeshData, unsigned int>> pathToTerrainVAOandTexture; //path : <Meshdata, texture>
+    std::unordered_map<const char*, std::pair<MeshData, unsigned int>> pathToTerrainMeshDataAndTextureID; //path : <Meshdata, texture>
 
     //FRAMEBUFFERS
     void SetupFramebuffers();

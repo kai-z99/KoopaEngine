@@ -11,6 +11,7 @@
 #include "Setup.h"
 #include "Camera.h"
 #include "Model.h"
+#include "Constants.h"
 
 #include <iostream>
 
@@ -28,16 +29,16 @@ Renderer::Renderer()
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
     //SHADERS-------------------------------------------------
+    this->currentMaterial = Material();
+    this->ResetMaterial();
 
     //Main lighting shader
     this->lightingShader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->lightingShader->use();
-    this->currentDiffuseTexture = TextureSetup::LoadTexture("../ShareLib/Resources/wood.png");
-    this->currentNormalMapTexture = TextureSetup::LoadTexture("../ShareLib/Resources/brickwall_normal.jpg");
     //ASSOCIATE TEXTURES----
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.diffuse"), 0);      //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.normal"), 1);       //GL_TEXTURE1
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.specular"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
 
@@ -81,10 +82,10 @@ Renderer::Renderer()
     this->terrainShader = new Shader(ShaderSources::vsTerrain, ShaderSources::fs1, nullptr,
         ShaderSources::tcsTerrain, ShaderSources::tesTerrain);
     this->terrainShader->use();
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9);        //GL_TEXTURE0
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentDiffuse"), 0);   //GL_TEXTURE0
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "currentNormalMap"), 1); //GL_TEXTURE1
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirShadowMap"), 2);     //GL_TEXTURE2
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "heightMap"), 9);             //GL_TEXTURE9
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "material.diffuse"), 0);      //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "material.normal"), 1);       //GL_TEXTURE1
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "material.specular"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
     //Stuff for cascade shadows
@@ -115,8 +116,6 @@ Renderer::Renderer()
 
     //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
     //here in the constructor.
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, this->dirShadowMapTextureDepth);
     //point
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
@@ -193,15 +192,15 @@ void Renderer::EndRenderFrame()
         if (d->GetHeightMapPath() == nullptr) //not drawing terrain
         {
             this->lightingShader->use();
-            d->SendUniqueUniforms(this->lightingShader); //set the uniforms unique to each draw call
+            d->BindMaterialUniforms(this->lightingShader); //set the uniforms unique to each draw call
             d->Render(this->lightingShader);
         }   
         else
         {
             this->terrainShader->use();
             glActiveTexture(GL_TEXTURE9); // Activate unit 9, the heightmap
-            glBindTexture(GL_TEXTURE_2D, this->pathToTerrainVAOandTexture[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
-            d->SendUniqueUniforms(this->terrainShader); //set the uniforms unique to each draw call
+            glBindTexture(GL_TEXTURE_2D, this->pathToTerrainMeshDataAndTextureID[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
+            d->BindMaterialUniforms(this->terrainShader); //set the uniforms unique to each draw call
             d->Render(this->terrainShader);
         }
         glActiveTexture(GL_TEXTURE0); 
@@ -580,23 +579,47 @@ void Renderer::AddToTextureMap(const char* path)
     }
 }
 
-void Renderer::SetCurrentDiffuse(const char* path, float specularIntensity)
+void Renderer::ResetMaterial()
 {
-    AddToTextureMap(path);
-    this->drawCalls.back()->SetDiffuseMapTexture(this->textureToID[path]);
-    this->drawCalls.back()->SetSpecularIntensity(specularIntensity);
+    this->currentMaterial.baseColor = noTexturePink;
+    this->currentMaterial.diffuse = -1;
+    this->currentMaterial.normal = -1;
+    this->currentMaterial.specular = -1;
+    this->currentMaterial.baseSpecular = 1.0f;
+    this->currentMaterial.useDiffuseMap = false;
+    this->currentMaterial.useNormalMap = false;
+    this->currentMaterial.useSpecularMap = false;
 }
 
-void Renderer::SetCurrentColorDiffuse(Vec3 col, float specularIntensity)
+void Renderer::SetCurrentDiffuse(const char* path)
 {
-    this->drawCalls.back()->SetDiffuseColor(col);
-    this->drawCalls.back()->SetSpecularIntensity(specularIntensity);
+    AddToTextureMap(path);
+    this->currentMaterial.diffuse = this->textureToID[path];
+    this->currentMaterial.useDiffuseMap = true;
+}
+
+void Renderer::SetCurrentBaseColor(Vec3 col)
+{
+    this->currentMaterial.baseColor = col;
 }
 
 void Renderer::SetCurrentNormal(const char* path)
 {
     AddToTextureMap(path);
-    this->drawCalls.back()->SetNormalMapTexture(this->textureToID[path]);
+    this->currentMaterial.normal = this->textureToID[path];
+    this->currentMaterial.useNormalMap = true;
+}
+
+void Renderer::SetCurrentSpecular(const char* path)
+{
+    AddToTextureMap(path);
+    this->currentMaterial.specular = this->textureToID[path];
+    this->currentMaterial.useSpecularMap = true;
+}
+
+void Renderer::SetBaseSpecular(float spec)
+{
+    this->currentMaterial.baseSpecular = spec;
 }
 
 void Renderer::SetSkybox(const std::vector<const char*>& faces)
@@ -623,19 +646,19 @@ static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
-    this->drawCalls.push_back(new DrawCall(this->triangleMeshData, model));
+    this->drawCalls.push_back(new DrawCall(this->triangleMeshData, this->currentMaterial, model));
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->cubeMeshData, model));
+    this->drawCalls.push_back(new DrawCall(this->cubeMeshData, this->currentMaterial, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
-    this->drawCalls.push_back(new DrawCall(this->planeMeshData, model));
+    this->drawCalls.push_back(new DrawCall(this->planeMeshData, this->currentMaterial, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
     //TODO: How is this not being set to true in the shadow rendering?
 }
@@ -643,7 +666,7 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->sphereMeshData, model));
+    this->drawCalls.push_back(new DrawCall(this->sphereMeshData, this->currentMaterial, model));
 }
 
 void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)
@@ -666,15 +689,17 @@ void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size
 
 void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
 {
-    auto it = this->pathToTerrainVAOandTexture.find(path);
+    auto it = this->pathToTerrainMeshDataAndTextureID.find(path);
 
-    if (it == this->pathToTerrainVAOandTexture.end())
+    if (it == this->pathToTerrainMeshDataAndTextureID.end())
     {
-        this->pathToTerrainVAOandTexture[path] = VertexBufferSetup::SetupTerrainBuffers(path);
+        this->pathToTerrainMeshDataAndTextureID[path] = VertexBufferSetup::SetupTerrainBuffers(path);
     }
 
-    glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->pathToTerrainVAOandTexture[path].first, model, GL_PATCHES));
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size);                       //MeshData
+    this->drawCalls.push_back(new DrawCall(this->pathToTerrainMeshDataAndTextureID[path].first, 
+        this->currentMaterial, model, GL_PATCHES));
+
     this->drawCalls.back()->SetHeightMapPath(path);
 }
 

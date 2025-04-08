@@ -44,6 +44,8 @@ public:
         for (unsigned int i = 0; i < meshes.size(); i++)
         {
             glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasNormalMap"), meshes[i].hasNormalMap);
+            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasDiffuseMap"), meshes[i].hasDiffuseMap);
+            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasSpecularMap"), meshes[i].hasSpecularMap);
             meshes[i].Draw(shader);
         }
             
