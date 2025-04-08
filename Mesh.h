@@ -44,8 +44,10 @@ public:
     vector<unsigned int> indices;
     vector<Texture>      textures;
     unsigned int VAO;
-    bool hasNormalMap;
 
+    bool hasDiffuseMap;
+    bool hasNormalMap;
+    bool hasSpecularMap;
     // constructor
     Mesh(vector<Vertex> vertices, vector<unsigned int> indices, vector<Texture> textures)
     {
@@ -54,11 +56,13 @@ public:
         this->textures = textures;
             
         this->hasNormalMap = false;
-        for (const auto& tex : this->textures) {
-            if (tex.type == "texture_normal") {
-                this->hasNormalMap = true;
-                break;
-            }
+        for (const auto& tex : this->textures) 
+        {
+            if (tex.type == "texture_diffuse") this->hasDiffuseMap = true;
+            if (tex.type == "texture_normal") this->hasNormalMap = true;
+            if (tex.type == "texture_specular") this->hasSpecularMap = true;
+            //early break
+            if (this->hasDiffuseMap && this->hasNormalMap && this->hasSpecularMap) break;
         }
 
         // now that we have all the required data, set the vertex buffers and its attribute pointers.

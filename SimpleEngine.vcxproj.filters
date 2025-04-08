@@ -90,6 +90,9 @@
   <ItemGroup>
     <None Include="vs1.glsl" />
     <None Include="fs1.glsl" />
+    <None Include="legacy.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="wood.png">

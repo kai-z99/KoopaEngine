@@ -181,6 +181,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="fs1.glsl" />
+    <None Include="legacy.glsl" />
     <None Include="vs1.glsl" />
   </ItemGroup>
   <ItemGroup>
