@@ -151,6 +151,32 @@ Renderer::~Renderer()
     for (DrawCall* d : this->drawCalls) delete d;
 }
 
+static bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
+{
+    //Vec3 -> glm::vec3
+    glm::vec3 minBounds = glm::vec3(worldAABB.min.x, worldAABB.min.y, worldAABB.min.z);
+    glm::vec3 maxBounds = glm::vec3(worldAABB.max.x, worldAABB.max.y, worldAABB.max.z);
+
+    //get center and extents of aabb
+    glm::vec3 center = glm::vec3(maxBounds + minBounds) * 0.5f;
+    glm::vec3 extents = maxBounds - center;
+
+    //go through each plane (a,b,c,d)
+    for (int i = 0; i < 6; i++)
+    {
+        const glm::vec4& plane = frustumPlanes[i];
+        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal
+        float distance = plane.w;            //d = distance
+
+        float projectedRadius = glm::dot(extents, glm::abs(normal));
+        float boxDistance = glm::dot(normal, center) + distance;
+
+        if (boxDistance < -projectedRadius) return false;
+    }
+
+    return true; //is in all planes
+}
+
 void Renderer::BeginRenderFrame()
 {
     //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
@@ -171,7 +197,7 @@ void Renderer::EndRenderFrame()
             this->RenderPointShadowMap(i);
         }
     }
-  
+
     //DRAW INTO FINAL IMAGE---
     //bind FBO
     glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
@@ -185,14 +211,19 @@ void Renderer::EndRenderFrame()
 
     //render
     for (DrawCall* d : this->drawCalls)
-    {
-        //Sends and binds the normalmap, diffusemap textures. (if applicable)
-        
+    {     
+        //Frustum culling
+        AABB worldAABB = d->GetWorldAABB();
+        if (!IsAABBVisible(worldAABB, this->cameraFrustumPlanes))
+        {
+            continue;
+        }
+
         //Draw with shader. (model matrix is sent here)
         if (d->GetHeightMapPath() == nullptr) //not drawing terrain
         {
             this->lightingShader->use();
-            d->BindMaterialUniforms(this->lightingShader); //set the uniforms unique to each draw call
+            d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
             d->Render(this->lightingShader);
         }   
         else
@@ -200,7 +231,7 @@ void Renderer::EndRenderFrame()
             this->terrainShader->use();
             glActiveTexture(GL_TEXTURE9); // Activate unit 9, the heightmap
             glBindTexture(GL_TEXTURE_2D, this->pathToTerrainMeshDataAndTextureID[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
-            d->BindMaterialUniforms(this->terrainShader); //set the uniforms unique to each draw call
+            d->BindMaterialUniforms(this->terrainShader); //set the material unique to each draw call
             d->Render(this->terrainShader);
         }
         glActiveTexture(GL_TEXTURE0); 
@@ -283,6 +314,31 @@ void Renderer::BlurBrightScene()
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void UpdateFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
+{
+    // Left: vp[3] + vp[0] (column vectors)
+    frustumPlanes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+    // Right: vp[3] - vp[0]
+    frustumPlanes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+    // Bottom: vp[3] + vp[1]
+    frustumPlanes[2] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+    // Top: vp[3] - vp[1]
+    frustumPlanes[3] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+    // Near: vp[3] + vp[2]
+    frustumPlanes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+    // Far: vp[3] - vp[2]
+    frustumPlanes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
+
+    // Normalize the planes (can we use glm::normalize here?)
+    for (int i = 0; i < 6; i++) 
+    {
+        float mag = glm::length(glm::vec3(frustumPlanes[i])); // Length of normal (a,b,c)
+        if (mag > std::numeric_limits<float>::epsilon()) {
+            frustumPlanes[i] /= mag;
+        }
+    }
 }
 
 void Renderer::DrawSkybox()
@@ -488,10 +544,23 @@ void Renderer::RenderCascadedShadowMap()
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
        
+        static int count = 0;
+        if (count % 60 == 0) std::cout << "Culled in cascades: " << count << '\n';
+
+        glm::vec4 frustumPlanes[6];
         //note: model matrix is sent in d->Render()
         //glCullFace(GL_FRONT);
         for (DrawCall* d : this->drawCalls)
         {
+            AABB worldAABB = d->GetWorldAABB();
+            UpdateFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
+
+            if (!IsAABBVisible(worldAABB, frustumPlanes))
+            {
+                count++;
+                continue;
+            }
+
             d->SetCulling(false);
             d->Render(this->cascadeShadowShader);
         }
@@ -536,6 +605,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     glUniform1f(glGetUniformLocation(this->pointShadowShader->ID, "pointShadowProjFarPlane"), far);
     glUniform3fv(glGetUniformLocation(this->pointShadowShader->ID, "lightPos"), 1, glm::value_ptr(lightPos));
 
+    glm::vec4 shadowProjFrustumPlanes[6];
+
     //Render each face of the cubemap
     for (int i = 0; i < 6; i++)
     {
@@ -547,9 +618,22 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
         //clear the currently bound attachment's depth buffer
         glClear(GL_DEPTH_BUFFER_BIT); 
+
+        UpdateFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
+
+        static int count = 0;
+        if (count % 60 == 0) std::cout << "calls culled: " << count << '\n';
+
         //render
         for (DrawCall* d : this->drawCalls)
         {
+            AABB worldAABB = d->GetWorldAABB();
+            if (!IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
+            {
+                count++;
+                continue; //object is not in that side of the cubemap, dont bother with it.
+            }
+
             d->SetCulling(false);
             d->Render(this->pointShadowShader);
             d->SetCulling(true);
@@ -561,7 +645,6 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
 void Renderer::ClearScreen(Vec4 col)
 {
-
     glClearColor(col.r, col.g, col.b, col.a); //This sets what glClear will clear as.
     this->drawCalls.clear();
     //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); //fill it with that clear color.
@@ -845,6 +928,9 @@ void Renderer::InitializeDirLight()
 
 void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
+    //update camerea frustum planes since we have access to the camera here
+    UpdateFrustumPlanes(projection * view, this->cameraFrustumPlanes);
+
     this->lightingShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));

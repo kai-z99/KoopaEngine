@@ -138,6 +138,7 @@ private:
     void DrawFinalQuad();
     void BlurBrightScene();
     Vec4 clearColor;
+    glm::vec4 cameraFrustumPlanes[6]; //for frustum culling
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();

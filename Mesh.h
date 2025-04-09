@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Shader.h"
+#include "Definitions.h"
 
 #include <string>
 #include <vector>
@@ -44,6 +45,7 @@ public:
     vector<unsigned int> indices;
     vector<Texture>      textures;
     unsigned int VAO;
+    AABB aabb;
 
     bool hasDiffuseMap;
     bool hasNormalMap;
@@ -54,8 +56,13 @@ public:
         this->vertices = vertices;
         this->indices = indices;
         this->textures = textures;
+
+        this->calculateAABB();
             
+        this->hasDiffuseMap = false; // Initialize flags
         this->hasNormalMap = false;
+        this->hasSpecularMap = false;
+
         for (const auto& tex : this->textures) 
         {
             if (tex.type == "texture_diffuse") this->hasDiffuseMap = true;
@@ -156,6 +163,27 @@ private:
         glEnableVertexAttribArray(6);
         glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, m_Weights));
         glBindVertexArray(0);
+    }
+
+    void calculateAABB()
+    {
+        if (this->vertices.empty())
+        {
+            aabb.min = Vec3(0.0f, 0.0f, 0.0f);
+            aabb.max = Vec3(0.0f, 0.0f, 0.0f);
+            return;
+        }
+
+        const glm::vec3& firstPos = vertices[0].Position;
+        aabb.min = Vec3(firstPos.x, firstPos.y, firstPos.z);
+        aabb.max = Vec3(firstPos.x, firstPos.y, firstPos.z);
+
+        for (size_t i = 1; i < vertices.size(); ++i) {
+            const glm::vec3& currentPosGLM = vertices[i].Position;
+
+            Vec3 currentPos = Vec3(currentPosGLM.x, currentPosGLM.y, currentPosGLM.z);
+            aabb.expand(currentPos); 
+        }
     }
 };
 #endif

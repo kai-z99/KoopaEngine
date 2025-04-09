@@ -37,7 +37,6 @@ static inline AABB GetAABB(float* vertexData, unsigned int vertexCount, unsigned
     return aabb;
 }
 
-
 namespace VertexBufferSetup
 {
 	MeshData SetupTriangleBuffers()
@@ -199,7 +198,7 @@ namespace VertexBufferSetup
                 float x2 = std::cos(u0 * 2.0f * PI) * std::sin(v1 * PI);
                 float y2 = std::cos(v1 * PI);
                 float z2 = std::sin(u0 * 2.0f * PI) * std::sin(v1 * PI);
-
+                
                 float x3 = std::cos(u1 * 2.0f * PI) * std::sin(v1 * PI);
                 float y3 = std::cos(v1 * PI);
                 float z3 = std::sin(u1 * 2.0f * PI) * std::sin(v1 * PI);

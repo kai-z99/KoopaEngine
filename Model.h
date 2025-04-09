@@ -30,12 +30,14 @@ public:
     vector<Texture> textures_loaded;	// stores all the textures loaded so far, optimization to make sure textures aren't loaded more than once.
     vector<Mesh>    meshes;
     string directory;
+    AABB aabb;
     bool gammaCorrection;
 
     // constructor, expects a filepath to a 3D model.
     Model(string const& path, bool gamma = false) : gammaCorrection(gamma)
     {
         loadModel(path);
+        this->calculateAABB();
     }
 
     // draws the model, and thus all its meshes
@@ -205,6 +207,23 @@ private:
             }
         }
         return textures;
+    }
+
+    void calculateAABB()
+    {
+        if (this->meshes.empty()) 
+        {
+            aabb.min = Vec3(0.0f, 0.0f, 0.0f);
+            aabb.max = Vec3(0.0f, 0.0f, 0.0f);
+            return;
+        }
+
+        aabb = meshes[0].aabb;
+
+        for (size_t i = 1; i < this->meshes.size(); i++)
+        {
+            aabb.expand(meshes[i].aabb);
+        }
     }
 };
 

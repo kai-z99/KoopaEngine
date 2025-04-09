@@ -26,6 +26,9 @@ public:
 	const char* GetHeightMapPath();
 	void SetHeightMapPath(const char* path);
 
+	//frustum culling
+	AABB GetWorldAABB() const;
+
 private:
 	//Mesh Data
 	unsigned int VAO;

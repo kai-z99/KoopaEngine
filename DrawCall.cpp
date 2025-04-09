@@ -15,6 +15,7 @@ DrawCall::DrawCall(MeshData meshData, Material material, const glm::mat4& model,
     this->aabb = meshData.aabb;
     this->modelMatrix = model;
     this->primitive = primitive;
+    this->aabb = meshData.aabb;
 
     //general flags
     this->usingCulling = true;
@@ -28,6 +29,7 @@ DrawCall::DrawCall(Model* m, const glm::mat4 model)
     this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
     this->model = m;
     this->modelMatrix = model;
+    this->aabb = m->aabb;
 
     //general flags
     this->usingCulling = true;
@@ -117,4 +119,38 @@ void DrawCall::SetHeightMapPath(const char* path)
 {
     assert(this->model == nullptr);
     this->heightMapPath = path;
+}
+
+AABB DrawCall::GetWorldAABB() const
+{
+    //Vec3 -> glm::vec3
+    glm::vec3 min = glm::vec3(this->aabb.min.x, this->aabb.min.y, this->aabb.min.z);
+    glm::vec3 max = glm::vec3(this->aabb.max.x, this->aabb.max.y, this->aabb.max.z);
+
+    std::vector<glm::vec3> corners =
+    {
+        // Bottom face (y = min.y)
+        {min.x, min.y, min.z},  // L-B-F: left, bottom, (-z)
+        {max.x, min.y, min.z},  // R-B-F: right, bottom,  (-z)
+        {min.x, min.y, max.z},  // L-B-B: left, bottom,  (+z)
+        {max.x, min.y, max.z},  // R-B-B: right, bottom,  (+z)
+
+        // Top face (y = max.y)
+        {min.x, max.y, min.z},  // L-T-F: left, top,  (-z)
+        {max.x, max.y, min.z},  // R-T-F: right, top,  (-z)
+        {min.x, max.y, max.z},  // L-T-B: left, top,  (+z)
+        {max.x, max.y, max.z}   // R-T-B: right, top,  (+z)
+    };
+
+    AABB worldAABB;
+
+    for (const glm::vec3& corner : corners)
+    {
+        glm::vec4 worldCorner = this->modelMatrix * glm::vec4(corner, 1.0f);
+        
+        worldAABB.expand(Vec3(worldCorner.x, worldCorner.y, worldCorner.z));
+
+    }
+
+    return worldAABB;
 }
