@@ -149,7 +149,6 @@ AABB DrawCall::GetWorldAABB() const
         glm::vec4 worldCorner = this->modelMatrix * glm::vec4(corner, 1.0f);
         
         worldAABB.expand(Vec3(worldCorner.x, worldCorner.y, worldCorner.z));
-
     }
 
     return worldAABB;

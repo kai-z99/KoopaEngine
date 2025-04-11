@@ -157,20 +157,38 @@ static bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
     glm::vec3 minBounds = glm::vec3(worldAABB.min.x, worldAABB.min.y, worldAABB.min.z);
     glm::vec3 maxBounds = glm::vec3(worldAABB.max.x, worldAABB.max.y, worldAABB.max.z);
 
-    //get center and extents of aabb
+    //get center of aabb
     glm::vec3 center = glm::vec3(maxBounds + minBounds) * 0.5f;
+    //the extents represent how far the AABB stretches from the center in each direction.
+    //like half the size of the box in each direction.
+    //NOTE: the direction of this vector is usually similar. (its always in the same octant)
     glm::vec3 extents = maxBounds - center;
 
     //go through each plane (a,b,c,d)
     for (int i = 0; i < 6; i++)
     {
         const glm::vec4& plane = frustumPlanes[i];
-        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal
-        float distance = plane.w;            //d = distance
-
+        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal (pointing inwards of the frustum)
+        float distance = plane.w;            //d = how far the plane is shifted from the origin.
+                                             //Therefore a plane that crosses the origin has d = 0.
+        
+        //projected radius tells us how far the box extends from its center in the direction of the normal.
+        //Note: it yields 0 if extends = 0 aka if AABB is a point. Refer to (1)
         float projectedRadius = glm::dot(extents, glm::abs(normal));
+
+        //How far is the center of the AABB is from the plane (sign is relative to normal).
+        //NOTE: distance_p = a·x + b·y + c·z + d. Where p = (x,y,z)
+        //      IF NORMAL is NORMALIZED:
+        //      distance_p > 0 means the point is on the same side as where the normal is pointing
+        //      distance_p < 0 means the point is on the opposite side
+        //      distance_p = 0 means point is on plane.
+
+        // boxDistance = a*center.x + b*center.y + c*center.z + distance (d)
         float boxDistance = glm::dot(normal, center) + distance;
 
+        //checks whether the entire AABB is completely on the “negative” side of the plane.
+        //Note: (1) if the AABB was a point , the check would just be if boxDistance is negative.
+        //      But we must take into account that the center of AABB is not just a point but has volume.
         if (boxDistance < -projectedRadius) return false;
     }
 
@@ -316,22 +334,73 @@ void Renderer::BlurBrightScene()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-static void UpdateFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
+static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
 {
-    // Left: vp[3] + vp[0] (column vectors)
+    //REMEMBER: M * v for (dim = 4) = vec4(dot(r0,v), dot(r1,v), dot(r2,v), dot(r3,v))
+
+    //THEREFORE: P_clip = vp * P_world
+    //           x_clip = dot(r_0, P_world) 
+    //           y_clip = dot(r_1, P_world)
+    //           z_clip = dot(r_2, P_world)
+    //           w_clip = dot(r_3, P_world)
+
+    //REMEMBER:
+    //          -w_clip <= x_clip <= w_clip
+    //          -w_clip <= y_clip <= w_clip
+    //          -w_clip <= z_clip <= w_clip
+    // (Since after perspective divide, anything out that range will be out of [-1,1] therefore
+    //      outside the frustum.)
+
+    //REMEMBER: Ax + By + Cz + D = 0
+    //      (1) dot((A,B,C,D), (x,y,z,1)) = 0 
+    // 
+    //  Notice that (x,y,z,1) can represent a world space coordinate.
+
+    //FORM THE PLANES
+    //
+    //Example: Right Plane ----------------------------
+    //
+    // x_clip <= w_clip     
+    // w_clip - x_clip >= 0                                       
+    // dot(r_3, P_world) - dot(r_0, P_world) >= 0              
+    // dot(r_3 - r_0, P_world) >= 0 
+    // Since we have (1)
+    // r_3 - r_0 = (A,B,C,D) for right plane (but D is not normalized since P_world.w is not nessassarily 1)
+    //
+    //Example: Left Plane -----------------------------
+    //
+    // -w_clip <= x_clip
+    //  ...
+    // dot(r_3 + r_0, P_world) >= 0
+    // Since we have (1)
+    // r_3 + r_0 = (A,B,C,D) for left plane
+    //
+    // So On... ---------------------------------------
+    //
+    // Top: r_3 - r_1
+    // Bot: r_3 + r_1
+    // Near: r_3 + r_2
+    // Far: r_3 - r_2
+                    
+    //REMEMBER: mat4[col][row] 
+    //EG: vec4 colX = mat4[0]
+    //    float colYrow3 = mat4[1][3]
+    
+    //                               r3.x + r0.x          r3.y + r0.y          r3.z + r0.z          r3.w + r0.w
+    //Left:(r_3+r_0) = (A,B,C,D)   A: (r3 + r0).x       B: (r3 + r0).y       C: (r3 + r0).z       D: (r3 + r0).w
     frustumPlanes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
-    // Right: vp[3] - vp[0]
+    //Right:(r_3-r_0)= (A,B,C,D)   A: (r3 - r0).x       B: (r3 - r0).y       C: (r3 - r0).z       D: (r3 - r0).w
     frustumPlanes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
-    // Bottom: vp[3] + vp[1]
+    // Bottom: r_3+r_1
     frustumPlanes[2] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
-    // Top: vp[3] - vp[1]
+    // Top: r_3-r_1
     frustumPlanes[3] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
-    // Near: vp[3] + vp[2]
+    // Near: r_3+r_2
     frustumPlanes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
-    // Far: vp[3] - vp[2]
+    // Far: r_3-r_2
     frustumPlanes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
 
-    // Normalize the planes (can we use glm::normalize here?)
+    // Normalize the planes
     for (int i = 0; i < 6; i++) 
     {
         float mag = glm::length(glm::vec3(frustumPlanes[i])); // Length of normal (a,b,c)
@@ -545,7 +614,7 @@ void Renderer::RenderCascadedShadowMap()
             false, glm::value_ptr(lightSpaceMatrices[i]));
        
         static int count = 0;
-        if (count % 60 == 0) std::cout << "Culled in cascades: " << count << '\n';
+        if (count % 60 == 0) std::cout << "Draw calls culled in cascade mapping: " << count << '\n';
 
         glm::vec4 frustumPlanes[6];
         //note: model matrix is sent in d->Render()
@@ -553,7 +622,7 @@ void Renderer::RenderCascadedShadowMap()
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
-            UpdateFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
+            GetFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
 
             if (!IsAABBVisible(worldAABB, frustumPlanes))
             {
@@ -619,10 +688,10 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         //clear the currently bound attachment's depth buffer
         glClear(GL_DEPTH_BUFFER_BIT); 
 
-        UpdateFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
+        GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
         static int count = 0;
-        if (count % 60 == 0) std::cout << "calls culled: " << count << '\n';
+        if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
         for (DrawCall* d : this->drawCalls)
@@ -929,7 +998,7 @@ void Renderer::InitializeDirLight()
 void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
     //update camerea frustum planes since we have access to the camera here
-    UpdateFrustumPlanes(projection * view, this->cameraFrustumPlanes);
+    GetFrustumPlanes(projection * view, this->cameraFrustumPlanes);
 
     this->lightingShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
