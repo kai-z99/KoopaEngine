@@ -168,12 +168,20 @@ static bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
     for (int i = 0; i < 6; i++)
     {
         const glm::vec4& plane = frustumPlanes[i];
-        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal (pointing inwards of the frustum)
+        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal (pointing inwards of the frustum, normalized)
         float distance = plane.w;            //d = how far the plane is shifted from the origin.
                                              //Therefore a plane that crosses the origin has d = 0.
         
-        //projected radius tells us how far the box extends from its center in the direction of the normal.
-        //Note: it yields 0 if extends = 0 aka if AABB is a point. Refer to (1)
+        // Projected radius tells us how thick the AABB is along the normal of the plane.
+        // Note: it yields 0 if extends = 0 aka if AABB is a point. Refer to (1)
+        // 
+        // dot(extents,|normal|) is just the scalar projection of the extents vector onto |normal|
+        // The scalar projection represents the contribution of each axis's extent in the direction
+        // of the plane normal. It's a scalar value representing how far the box extends along the normal,
+        // just what we need. 
+        // 
+        // Note that since normal is normalized, the result of the dot product is 
+        // in the same length units as the extents.
         float projectedRadius = glm::dot(extents, glm::abs(normal));
 
         //How far is the center of the AABB is from the plane (sign is relative to normal).
@@ -188,8 +196,8 @@ static bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
 
         //checks whether the entire AABB is completely on the “negative” side of the plane.
         //Note: (1) if the AABB was a point , the check would just be if boxDistance is negative.
-        //      But we must take into account that the center of AABB is not just a point but has volume.
-        if (boxDistance < -projectedRadius) return false;
+        //      But we must take into account that an AABB is not just a point and might poke into the plane.
+        if (boxDistance + projectedRadius < 0) return false;
     }
 
     return true; //is in all planes
@@ -351,21 +359,30 @@ static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
     // (Since after perspective divide, anything out that range will be out of [-1,1] therefore
     //      outside the frustum.)
 
-    //REMEMBER: Ax + By + Cz + D = 0
-    //      (1) dot((A,B,C,D), (x,y,z,1)) = 0 
+    //REMEMBER: Ax + By + Cz + D = 0 === dot((A,B,C,D), (x,y,z,1)) = 0
     // 
-    //  Notice that (x,y,z,1) can represent a world space coordinate.
+    //          A point (x,y,z) is on the side of the normal if Ax + By + Cz + D >= 0
+    //          
+    //      (1) A point (x,y,z) is on the side of the normal if dot((A,B,C,D), (x,y,z,1)) >= 0    
 
     //FORM THE PLANES
     //
     //Example: Right Plane ----------------------------
     //
-    // x_clip <= w_clip     
+    // x_clip <= w_clip  WHEN x_clip is in the right frustum (2)
     // w_clip - x_clip >= 0                                       
     // dot(r_3, P_world) - dot(r_0, P_world) >= 0              
-    // dot(r_3 - r_0, P_world) >= 0 
-    // Since we have (1)
-    // r_3 - r_0 = (A,B,C,D) for right plane (but D is not normalized since P_world.w is not nessassarily 1)
+    // dot(r_3 - r_0, P_world) >= 0  WHEN x_clip is in frustum (2)
+    // 
+    // According to (1):              
+    // The point P_world.xyz is on the positive side of the (world space) plane 
+    // defined by coefficients (r_3 - r_0) === (A,B,C,D)
+    // if dot((r_3 - r_0), P_world) >= 0 
+    // Since this condition is equivalent to the original clip-space condition for being
+    // inside the right boundary (2), this plane MUST be the
+    // *Right Frustum Plane* in WORLD space.
+    // 
+    // Therefore we let (r_3 - r_0) be our right frustum plane. 
     //
     //Example: Left Plane -----------------------------
     //
@@ -373,7 +390,7 @@ static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
     //  ...
     // dot(r_3 + r_0, P_world) >= 0
     // Since we have (1)
-    // r_3 + r_0 = (A,B,C,D) for left plane
+    // (r_3 + r_0) = (A,B,C,D) for left plane
     //
     // So On... ---------------------------------------
     //
