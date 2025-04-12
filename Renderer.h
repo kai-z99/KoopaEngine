@@ -27,6 +27,7 @@ public:
 
     //Geometry drawing functions
     void SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
+    void SendOtherUniforms();
     void ClearScreen(Vec4 col);
     void DrawTriangle(Vec3 pos, Vec4 rotation);
     void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
@@ -44,6 +45,10 @@ public:
     void SetBaseSpecular(float spec);
     void SetSkybox(const std::vector<const char*>& faces);
     void SetExposure(float exposure);
+    void SetFogType(FogType fog);
+    void SetFogColor(Vec3 col);
+    void SetExpFogDensity(float density);
+    void SetLinearFogStart(float start);
 
 	//Light functions
     void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity, bool shadow);
@@ -51,6 +56,13 @@ public:
     bool drawDebugLights;
 
 private:
+    //Constructor helpers
+    void InitializeShaders();
+
+    //Render
+    void RenderMainScene();
+    void RenderShadowMaps();
+
     //Shader objects
     Shader* lightingShader; 
     Shader* debugLightShader;
@@ -70,6 +82,11 @@ private:
     unsigned int currentSkyboxTexture;
     bool usingSkybox;
     void DrawSkybox();
+    //fog
+    FogType fogType;
+    glm::vec3 fogColor;
+    float expFogDensity;
+    float linearFogStart;
 
     //MODEL
     std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
@@ -120,7 +137,7 @@ private:
     //SHADOWS
     //directional
     unsigned int D_SHADOW_WIDTH = 1024, D_SHADOW_HEIGHT = 1024;
-    void RenderDirShadowMap();
+    //void RenderDirShadowMap();
     //cascade
     unsigned int CASCADE_SHADOW_WIDTH = 1024, CASCADE_SHADOW_HEIGHT = 1024;
     std::vector<float> cascadeLevels;
@@ -139,6 +156,8 @@ private:
     void BlurBrightScene();
     Vec4 clearColor;
     glm::vec4 cameraFrustumPlanes[6]; //for frustum culling
+    bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes);
+    void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes);
 
     //VERTEX BUFFER/ARRAY
     void SetupVertexBuffers();

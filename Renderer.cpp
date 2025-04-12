@@ -18,16 +18,43 @@
 Renderer::Renderer()
 {
     glEnable(GL_DEPTH_TEST);
-    //glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
 
-    //Static setup
-	this->SetupVertexBuffers();
-    //                              2                                                      
+    //Static setup                                                 
     this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f };
     this->drawCalls = {};
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    this->fogColor = glm::vec3(0.0f); //disabled
+    this->expFogDensity = 0.15f;
+    this->linearFogStart = 70.0f;
+    this->fogType = EXPONENTIAL_SQUARED;
+    
+    //shaders
+    this->InitializeShaders();
 
+    //LIGHTING-------------------------------------------------
+    //Initialialize lighting
+    this->InitializePointLights();
+    this->InitializeDirLight();
+    this->currentFramePointLightCount = 0;
+
+    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
+    this->SetupFramebuffers();
+    this->SetupVertexBuffers();
+
+    //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
+    //here in the constructor.
+    //point
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
+    //cascade
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
+}
+
+void Renderer::InitializeShaders()
+{
     //SHADERS-------------------------------------------------
     this->currentMaterial = Material();
     this->ResetMaterial();
@@ -40,7 +67,7 @@ Renderer::Renderer()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.normal"), 1);       //GL_TEXTURE1
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.specular"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4); 
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4);
 
     //Stuff for cascade shadows
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), (unsigned int)this->cascadeLevels.size()); //3 (4 matrices)
@@ -66,7 +93,7 @@ Renderer::Renderer()
     this->blurShader->use();
     glUniform1i(glGetUniformLocation(this->blurShader->ID, "brightScene"), 0); //GL_TEXTIRE0
     //horizontal is set in BlurBrightScene()
-    
+
     //Dir shadow shader
     this->dirShadowShader = new Shader(ShaderSources::vsDirShadow, ShaderSources::fsDirShadow);
     //Cascade shadow shader
@@ -95,45 +122,49 @@ Renderer::Renderer()
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
         glUniform1f(glGetUniformLocation(this->terrainShader->ID, l.c_str()), this->cascadeLevels[i]);
     }
+}
 
-    //LIGHTING-------------------------------------------------
+void Renderer::SetupFramebuffers()
+{
+    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrColorBuffers);
+    FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
+    FramebufferSetup::SetupHalfResBrightFramebuffer(this->halfResBrightFBO, this->halfResBrightTextureRGBA);
 
-    //Initialialize lighting
-    this->InitializePointLights();
-    this->InitializeDirLight();
-    this->currentFramePointLightCount = 0;
+    FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth,
+        this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
 
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR)
+    FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
+        this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, (int)this->cascadeLevels.size() + 1);
+
+    //Point shadows
+    FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
+    TextureSetup::SetupPointShadowMapTextureArray(this->pointShadowMapTextureArrayDepth, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+}
+
+void Renderer::SetupVertexBuffers()
+{
+    this->triangleMeshData = VertexBufferSetup::SetupTriangleBuffers();
+    this->cubeMeshData = VertexBufferSetup::SetupCubeBuffers();
+    this->planeMeshData = VertexBufferSetup::SetupPlaneBuffers();
+    this->sphereMeshData = VertexBufferSetup::SetupSphereBuffers();
+    this->screenQuadMeshData = VertexBufferSetup::SetupScreenQuadBuffers();
+    this->skyboxMeshData = VertexBufferSetup::SetupSkyboxBuffers();
+}
+
+void Renderer::InitializePointLights()
+{
+    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
     {
-        std::cout << "glFramebufferTextureLayer error on efwcascade " << ": " << err << '\n';
+        this->pointLights[i] = PointLight();
+        this->SendPointLightUniforms(this->lightingShader, i);
+        this->SendPointLightUniforms(this->terrainShader, i);
     }
-    
-    //FBOs AND TEXTURES-------------------------------------------------
- 
-    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
-    this->SetupFramebuffers();
+}
 
-    //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
-    //here in the constructor.
-    //point
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayDepth);
-    //cascade
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
-
-    GLint maxTessLevel = 0;
-    glGetIntegerv(GL_MAX_TESS_GEN_LEVEL, &maxTessLevel);
-
-    if (maxTessLevel > 0) {
-        std::cout << "Maximum Supported Tessellation Generation Level: " << maxTessLevel << std::endl;
-    }
-    else {
-        // Check glGetError() if needed, but usually means tessellation isn't supported
-        // or the context isn't properly set up for GL 4.0+.
-        std::cerr << "Could not query GL_MAX_TESS_GEN_LEVEL. Tessellation might not be supported." << std::endl;
-    }
+void Renderer::InitializeDirLight()
+{
+    DirLight d = DirLight();
+    this->SendDirLightUniforms();
 }
 
 Renderer::~Renderer()
@@ -151,58 +182,6 @@ Renderer::~Renderer()
     for (DrawCall* d : this->drawCalls) delete d;
 }
 
-static bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
-{
-    //Vec3 -> glm::vec3
-    glm::vec3 minBounds = glm::vec3(worldAABB.min.x, worldAABB.min.y, worldAABB.min.z);
-    glm::vec3 maxBounds = glm::vec3(worldAABB.max.x, worldAABB.max.y, worldAABB.max.z);
-
-    //get center of aabb
-    glm::vec3 center = glm::vec3(maxBounds + minBounds) * 0.5f;
-    //the extents represent how far the AABB stretches from the center in each direction.
-    //like half the size of the box in each direction.
-    //NOTE: the direction of this vector is usually similar. (its always in the same octant)
-    glm::vec3 extents = maxBounds - center;
-
-    //go through each plane (a,b,c,d)
-    for (int i = 0; i < 6; i++)
-    {
-        const glm::vec4& plane = frustumPlanes[i];
-        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal (pointing inwards of the frustum, normalized)
-        float distance = plane.w;            //d = how far the plane is shifted from the origin.
-                                             //Therefore a plane that crosses the origin has d = 0.
-        
-        // Projected radius tells us how thick the AABB is along the normal of the plane.
-        // Note: it yields 0 if extends = 0 aka if AABB is a point. Refer to (1)
-        // 
-        // dot(extents,|normal|) is just the scalar projection of the extents vector onto |normal|
-        // The scalar projection represents the contribution of each axis's extent in the direction
-        // of the plane normal. It's a scalar value representing how far the box extends along the normal,
-        // just what we need. 
-        // 
-        // Note that since normal is normalized, the result of the dot product is 
-        // in the same length units as the extents.
-        float projectedRadius = glm::dot(extents, glm::abs(normal));
-
-        //How far is the center of the AABB is from the plane (sign is relative to normal).
-        //NOTE: distance_p = a·x + b·y + c·z + d. Where p = (x,y,z)
-        //      IF NORMAL is NORMALIZED:
-        //      distance_p > 0 means the point is on the same side as where the normal is pointing
-        //      distance_p < 0 means the point is on the opposite side
-        //      distance_p = 0 means point is on plane.
-
-        // boxDistance = a*center.x + b*center.y + c*center.z + distance (d)
-        float boxDistance = glm::dot(normal, center) + distance;
-
-        //checks whether the entire AABB is completely on the “negative” side of the plane.
-        //Note: (1) if the AABB was a point , the check would just be if boxDistance is negative.
-        //      But we must take into account that an AABB is not just a point and might poke into the plane.
-        if (boxDistance + projectedRadius < 0) return false;
-    }
-
-    return true; //is in all planes
-}
-
 void Renderer::BeginRenderFrame()
 {
     //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
@@ -212,6 +191,75 @@ void Renderer::BeginRenderFrame()
 void Renderer::EndRenderFrame()
 {
     //RENDER SHADOW MAPS---
+    this->RenderShadowMaps();
+
+    //Render the main scene into hdrFBO texture (2 targets: main, bright)
+    this->RenderMainScene();
+
+    //draw debug lights into hdrFBO is applicable
+    this->DrawLightsDebug();
+
+    //Draw skybox last (using z = w optimization)
+    this->DrawSkybox();
+    
+    //DO BLOOM STUFF---
+    this->BlurBrightScene();
+
+    //DRAW QUAD ONTO SCREEN---
+    //Draw the final scene on a full screen quad.
+    this->DrawFinalQuad();
+
+    //CLEANUP---
+    //reset lights for the next frame
+    this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
+    this->drawCalls.clear(); //raylib style
+}
+
+void Renderer::RenderMainScene()
+{
+    //DRAW INTO FINAL IMAGE---
+    //bind FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
+
+    //clear main scene with current color, clear bright scene with black always.
+    glClearBufferfv(GL_COLOR, 0, (float*)&this->clearColor);
+    GLfloat black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    glClearBufferfv(GL_COLOR, 1, black);
+
+    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    //render
+    for (DrawCall* d : this->drawCalls)
+    {
+        //Frustum culling
+        AABB worldAABB = d->GetWorldAABB();
+        if (!this->IsAABBVisible(worldAABB, this->cameraFrustumPlanes))
+        {
+            continue;
+        }
+
+        //Draw with shader. (model matrix is sent here)
+        if (d->GetHeightMapPath() == nullptr) //not drawing terrain
+        {
+            this->lightingShader->use();
+            d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
+            d->Render(this->lightingShader);
+        }
+        else
+        {
+            this->terrainShader->use();
+            glActiveTexture(GL_TEXTURE9); // Activate unit 9, the heightmap
+            glBindTexture(GL_TEXTURE_2D, this->pathToTerrainMeshDataAndTextureID[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
+            d->BindMaterialUniforms(this->terrainShader); //set the material unique to each draw call
+            d->Render(this->terrainShader);
+        }
+        glActiveTexture(GL_TEXTURE0);
+    }
+}
+
+void Renderer::RenderShadowMaps()
+{
     //dir
     if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
@@ -223,70 +271,13 @@ void Renderer::EndRenderFrame()
             this->RenderPointShadowMap(i);
         }
     }
-
-    //DRAW INTO FINAL IMAGE---
-    //bind FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
-    //clear main scene with current color, clear bright scene with black always.
-    glClearBufferfv(GL_COLOR, 0, (float*) & this->clearColor); 
-    GLfloat black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    glClearBufferfv(GL_COLOR, 1, black); 
-
-    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); 
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); 
-
-    //render
-    for (DrawCall* d : this->drawCalls)
-    {     
-        //Frustum culling
-        AABB worldAABB = d->GetWorldAABB();
-        if (!IsAABBVisible(worldAABB, this->cameraFrustumPlanes))
-        {
-            continue;
-        }
-
-        //Draw with shader. (model matrix is sent here)
-        if (d->GetHeightMapPath() == nullptr) //not drawing terrain
-        {
-            this->lightingShader->use();
-            d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
-            d->Render(this->lightingShader);
-        }   
-        else
-        {
-            this->terrainShader->use();
-            glActiveTexture(GL_TEXTURE9); // Activate unit 9, the heightmap
-            glBindTexture(GL_TEXTURE_2D, this->pathToTerrainMeshDataAndTextureID[d->GetHeightMapPath()].second); // Bind the stored heightmap ID
-            d->BindMaterialUniforms(this->terrainShader); //set the material unique to each draw call
-            d->Render(this->terrainShader);
-        }
-        glActiveTexture(GL_TEXTURE0); 
-    }
-
-    this->drawCalls.clear(); //raylib style
-    //draw debug light into FBO is applicable
-    if (this->drawDebugLights) this->DrawLightsDebug();
-
-    //Draw skybox last (using z = w optimization)
-    if (this->usingSkybox) this->DrawSkybox();
-    
-    //DO BLOOM STUFF---
-    this->BlurBrightScene();
-
-    //DRAW QUAD ONTO SCREEN---
-    //go to main FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
-    glClear(GL_COLOR_BUFFER_BIT);
-    //Draw the final scene on a full screen quad.
-    this->DrawFinalQuad();
-
-    //CLEANUP---
-    //reset lights for the next frame
-    this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
-    
 }
+
 void Renderer::DrawFinalQuad()
 {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
     glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
     this->screenShader->use();
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -342,7 +333,7 @@ void Renderer::BlurBrightScene()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
+void Renderer::GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
 {
     //REMEMBER: M * v for (dim = 4) = vec4(dot(r0,v), dot(r1,v), dot(r2,v), dot(r3,v))
 
@@ -372,14 +363,14 @@ static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
     // x_clip <= w_clip  WHEN x_clip is in the right frustum (2)
     // w_clip - x_clip >= 0                                       
     // dot(r_3, P_world) - dot(r_0, P_world) >= 0              
-    // dot(r_3 - r_0, P_world) >= 0  WHEN x_clip is in frustum (2)
+    // dot(r_3 - r_0, P_world) >= 0  WHEN x_clip is in frustum
     // 
     // According to (1):              
     // The point P_world.xyz is on the positive side of the (world space) plane 
     // defined by coefficients (r_3 - r_0) === (A,B,C,D)
     // if dot((r_3 - r_0), P_world) >= 0 
     // Since this condition is equivalent to the original clip-space condition for being
-    // inside the right boundary (2), this plane MUST be the
+    // inside the right boundary, this plane MUST be the
     // *Right Frustum Plane* in WORLD space.
     // 
     // Therefore we let (r_3 - r_0) be our right frustum plane. 
@@ -427,65 +418,80 @@ static void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes)
     }
 }
 
-void Renderer::DrawSkybox()
+bool Renderer::IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes)
 {
-    this->skyShader->use();
-    glDepthFunc(GL_LEQUAL);
-    unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
-    glDrawBuffers(1, attachments);
-    glBindVertexArray(this->skyboxMeshData.VAO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, this->currentSkyboxTexture);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    //Vec3 -> glm::vec3
+    glm::vec3 minBounds = glm::vec3(worldAABB.min.x, worldAABB.min.y, worldAABB.min.z);
+    glm::vec3 maxBounds = glm::vec3(worldAABB.max.x, worldAABB.max.y, worldAABB.max.z);
 
-    glBindVertexArray(0);
-    glDepthFunc(GL_LESS);
-    unsigned int attachments2[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-    glDrawBuffers(2, attachments2);
+    //get center of aabb
+    glm::vec3 center = glm::vec3(maxBounds + minBounds) * 0.5f;
+    //the extents represent how far the AABB stretches from the center in each direction.
+    //like half the size of the box in each direction.
+    //NOTE: the direction of this vector is usually similar. (its always in the same octant)
+    glm::vec3 extents = maxBounds - center;
+
+    //go through each plane (a,b,c,d)
+    for (int i = 0; i < 6; i++)
+    {
+        const glm::vec4& plane = frustumPlanes[i];
+        glm::vec3 normal = glm::vec3(plane); //(a,b,c) = normal (pointing inwards of the frustum, normalized)
+        float distance = plane.w;            //d = how far the plane is shifted from the origin.
+        //Therefore a plane that crosses the origin has d = 0.
+
+        // Projected radius tells us how thick the AABB is along the normal of the plane.
+        // Note: it yields 0 if extends = 0 aka if AABB is a point. Refer to (1)
+        // 
+        // dot(extents,|normal|) is just the scalar projection of the extents vector onto |normal|
+        // The scalar projection represents the contribution of each axis's extent in the direction
+        // of the plane normal. It's a scalar value representing how far the box extends along the normal,
+        // just what we need. 
+        // 
+        // Note that since normal is normalized, the result of the dot product is 
+        // in the same length units as the extents.
+        float projectedRadius = glm::dot(extents, glm::abs(normal));
+
+        //How far is the center of the AABB is from the plane (sign is relative to normal).
+        //NOTE: distance_p = a·x + b·y + c·z + d. Where p = (x,y,z)
+        //      IF NORMAL is NORMALIZED:
+        //      distance_p > 0 means the point is on the same side as where the normal is pointing
+        //      distance_p < 0 means the point is on the opposite side
+        //      distance_p = 0 means point is on plane.
+
+        // boxDistance = a*center.x + b*center.y + c*center.z + distance (d)
+        float boxDistance = glm::dot(normal, center) + distance;
+
+        //checks whether the entire AABB is completely on the “negative” side of the plane.
+        //Note: (1) if the AABB was a point , the check would just be if boxDistance is negative.
+        //      But we must take into account that an AABB is not just a point and might poke into the plane.
+        if (boxDistance + projectedRadius < 0) return false;
+    }
+
+    return true; //is in all planes
 }
 
-void Renderer::RenderDirShadowMap()
+void Renderer::DrawSkybox()
 {
-    //Simulate a position.
-    //TODO: This should probably follow where the camera generally is.
-    glm::vec3 lightPos = -(this->dirLight.direction) * 3.0f; 
+    if (this->usingSkybox)
+    {
+        this->skyShader->use();
+        glDepthFunc(GL_LEQUAL);
 
-    //Snapshot properties
-    float nearPlane = D_NEAR_PLANE;
-    float farPlane = D_FAR_PLANE;
-    float size = D_FRUSTUM_SIZE; //side length of sqaure which is the shadowmap snapshot.
+        //just output to main hdr buffer, skybox should never have bloom
+        unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
+        glDrawBuffers(1, attachments);
 
-    //This matrix creates the size of the shadowMap snapshot.
-    //Note, its a square for simplity rn.
-    glm::mat4 lightProjectionMatrix = glm::ortho(-size, size, -size, size, nearPlane, farPlane);
-    glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)); //looking at origin from "lightpos"
+        //draw
+        glBindVertexArray(this->skyboxMeshData.VAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, this->currentSkyboxTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
-    //Transforms a fragment to the pov of the directional light
-    glm::mat4 lightSpaceMatrix = lightProjectionMatrix * lightViewMatrix; 
-
-    glViewport(0, 0, this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT); //make sure viewport is same as the texture size
-    //NOTE: Setting viewport==texturesize makes it basically "fullscreen" no matter the texture resolution.
-
-    //drawing into dir shadow framebuffer texture
-    glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
-    glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer, start clean.
-
-    //Send it!
-    this->lightingShader->use();
-    glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "dirLightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
-
-    this->dirShadowShader->use();
-    glUniformMatrix4fv(glGetUniformLocation(this->dirShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
-    //note: model matrix is sent in d->Render()
-
-    for (DrawCall* d : this->drawCalls)
-    {       
-        //IMPORTANT: DISABLE CULLING
-        //things are culled from your view perspecitve, but when you move to lightspace those 
-        //things will still be culled.
-        d->SetCulling(false);
-        d->Render(this->dirShadowShader);
-        d->SetCulling(true);
+        //clean
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
+        unsigned int attachments2[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, attachments2);
     }
 }
 
@@ -639,9 +645,9 @@ void Renderer::RenderCascadedShadowMap()
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
-            GetFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
+            this->GetFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
 
-            if (!IsAABBVisible(worldAABB, frustumPlanes))
+            if (!this->IsAABBVisible(worldAABB, frustumPlanes))
             {
                 count++;
                 continue;
@@ -705,7 +711,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         //clear the currently bound attachment's depth buffer
         glClear(GL_DEPTH_BUFFER_BIT); 
 
-        GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
+        this->GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
         static int count = 0;
         if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
@@ -714,7 +720,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
-            if (!IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
+            if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
             {
                 count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
@@ -803,6 +809,26 @@ void Renderer::SetExposure(float exposure)
     glUniform1f(glGetUniformLocation(this->screenShader->ID, "exposure"), exposure);
 }
 
+void Renderer::SetFogType(FogType fog)
+{
+    this->fogType = fog;
+}
+
+void Renderer::SetFogColor(Vec3 col)
+{
+    this->fogColor = glm::vec3(col.r, col.g, col.b);
+}
+
+void Renderer::SetExpFogDensity(float density)
+{
+    this->expFogDensity = density;
+}
+
+void Renderer::SetLinearFogStart(float start)
+{
+    this->linearFogStart = start;
+}
+
 static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
 {
     glm::mat4 model = glm::mat4(1.0f);
@@ -874,21 +900,24 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
 
 void Renderer::DrawLightsDebug()
 {
-    this->debugLightShader->use();
-    glBindVertexArray(this->cubeMeshData.VAO);
-
-    for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+    if (this->drawDebugLights)
     {
-        PointLight curr = this->pointLights[i];
-        if (!curr.isActive) continue;
+        this->debugLightShader->use();
+        glBindVertexArray(this->cubeMeshData.VAO);
 
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(curr.position.x, curr.position.y, curr.position.z));
-        model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
-        glUniformMatrix4fv(glGetUniformLocation(this->debugLightShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
-        glUniform3fv(glGetUniformLocation(debugLightShader->ID, "lightColor"), 1, glm::value_ptr(curr.color));
-        glUniform1f(glGetUniformLocation(debugLightShader->ID, "intensity"),curr.intensity);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+        {
+            PointLight curr = this->pointLights[i];
+            if (!curr.isActive) continue;
+
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, glm::vec3(curr.position.x, curr.position.y, curr.position.z));
+            model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
+            glUniformMatrix4fv(glGetUniformLocation(this->debugLightShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+            glUniform3fv(glGetUniformLocation(debugLightShader->ID, "lightColor"), 1, glm::value_ptr(curr.color));
+            glUniform1f(glGetUniformLocation(debugLightShader->ID, "intensity"), curr.intensity);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
     }
 }
 
@@ -996,32 +1025,17 @@ void Renderer::SendDirLightUniforms()
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "dirLight.castShadows"), dirLight.castShadows);
 }
 
-void Renderer::InitializePointLights()
-{
-    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
-    {
-        this->pointLights[i] = PointLight();
-        this->SendPointLightUniforms(this->lightingShader, i);
-        this->SendPointLightUniforms(this->terrainShader, i);
-    }
-}
-
-void Renderer::InitializeDirLight()
-{
-    DirLight d = DirLight();
-    this->SendDirLightUniforms();
-}
-
 void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position)
 {
     //update camerea frustum planes since we have access to the camera here
-    GetFrustumPlanes(projection * view, this->cameraFrustumPlanes);
+    this->GetFrustumPlanes(projection * view, this->cameraFrustumPlanes);
 
     this->lightingShader->use();
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glUniform3fv(glGetUniformLocation(this->lightingShader->ID, "viewPos"), 1, glm::value_ptr(position));
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "farPlane"), DEFAULT_FAR);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "nearPlane"), DEFAULT_NEAR);
 
     if (this->drawDebugLights)
     {
@@ -1044,33 +1058,22 @@ void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projec
     glUniformMatrix4fv(glGetUniformLocation(this->terrainShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "viewPos"), 1, glm::value_ptr(position));
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "farPlane"), DEFAULT_FAR);
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "nearPlane"), DEFAULT_NEAR);
 }
 
-void Renderer::SetupFramebuffers()
+void Renderer::SendOtherUniforms()
 {
-    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrColorBuffers);
-    FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
-    FramebufferSetup::SetupHalfResBrightFramebuffer(this->halfResBrightFBO, this->halfResBrightTextureRGBA);
-
-    FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth, 
-        this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
-
-    FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
-        this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, (int)this->cascadeLevels.size() + 1);
-
-    //Point shadows
-    FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
-    TextureSetup::SetupPointShadowMapTextureArray(this->pointShadowMapTextureArrayDepth, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
-}
-
-void Renderer::SetupVertexBuffers()
-{
-    this->triangleMeshData = VertexBufferSetup::SetupTriangleBuffers();
-    this->cubeMeshData = VertexBufferSetup::SetupCubeBuffers();
-    this->planeMeshData = VertexBufferSetup::SetupPlaneBuffers();
-    this->sphereMeshData = VertexBufferSetup::SetupSphereBuffers();
-    this->screenQuadMeshData = VertexBufferSetup::SetupScreenQuadBuffers();
-    this->skyboxMeshData = VertexBufferSetup::SetupSkyboxBuffers();
+    this->lightingShader->use();
+    glUniform3fv(glGetUniformLocation(this->lightingShader->ID, "fogColor"), 1, glm::value_ptr(this->fogColor));
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "fogType"), this->fogType);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "expFogDensity"), this->expFogDensity);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "linearFogStart"), this->linearFogStart);
+    
+    this->terrainShader->use();
+    glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "fogColor"), 1, glm::value_ptr(this->fogColor));
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "fogType"), this->fogType);
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "expFogDensity"), this->expFogDensity);
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "linearFogStart"), this->linearFogStart);
 }
 
 /*
@@ -1107,5 +1110,52 @@ void Renderer::RenderCascadedShadowMapGeo()
 
     glCullFace(GL_BACK);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+*/
+
+/*
+void Renderer::RenderDirShadowMap()
+{
+    //Simulate a position.
+    //TODO: This should probably follow where the camera generally is.
+    glm::vec3 lightPos = -(this->dirLight.direction) * 3.0f;
+
+    //Snapshot properties
+    float nearPlane = D_NEAR_PLANE;
+    float farPlane = D_FAR_PLANE;
+    float size = D_FRUSTUM_SIZE; //side length of sqaure which is the shadowmap snapshot.
+
+    //This matrix creates the size of the shadowMap snapshot.
+    //Note, its a square for simplity rn.
+    glm::mat4 lightProjectionMatrix = glm::ortho(-size, size, -size, size, nearPlane, farPlane);
+    glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)); //looking at origin from "lightpos"
+
+    //Transforms a fragment to the pov of the directional light
+    glm::mat4 lightSpaceMatrix = lightProjectionMatrix * lightViewMatrix;
+
+    glViewport(0, 0, this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT); //make sure viewport is same as the texture size
+    //NOTE: Setting viewport==texturesize makes it basically "fullscreen" no matter the texture resolution.
+
+    //drawing into dir shadow framebuffer texture
+    glBindFramebuffer(GL_FRAMEBUFFER, this->dirShadowMapFBO);
+    glClear(GL_DEPTH_BUFFER_BIT); //clear the depth buffer, start clean.
+
+    //Send it!
+    this->lightingShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(this->lightingShader->ID, "dirLightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+
+    this->dirShadowShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(this->dirShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+    //note: model matrix is sent in d->Render()
+
+    for (DrawCall* d : this->drawCalls)
+    {
+        //IMPORTANT: DISABLE CULLING
+        //things are culled from your view perspecitve, but when you move to lightspace those
+        //things will still be culled.
+        d->SetCulling(false);
+        d->Render(this->dirShadowShader);
+        d->SetCulling(true);
+    }
 }
 */

@@ -72,7 +72,7 @@ void KoopaEngine::BeginFrame()
     glm::mat4 view = this->camera->GetViewMatrix();
     glm::mat4 projection = glm::perspective(glm::radians(this->camera->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, DEFAULT_NEAR, DEFAULT_FAR);
     this->renderer->SendCameraUniforms(view, projection, this->camera->position);
-
+    this->renderer->SendOtherUniforms();
     this->renderer->BeginRenderFrame(); //sets to screen FB
 
     //TEMP
@@ -121,6 +121,26 @@ void KoopaEngine::SetCurrentSpecularTexture(const char* path)
 void KoopaEngine::SetCurrentBaseSpecular(float specular)
 {
     this->renderer->SetBaseSpecular(specular);
+}
+
+void KoopaEngine::SetFogColor(Vec3 col)
+{
+    this->renderer->SetFogColor(col);
+}
+
+void KoopaEngine::SetFogType(FogType type)
+{
+    this->renderer->SetFogType(type);
+}
+
+void KoopaEngine::SetExpFogDensity(float density)
+{
+    this->renderer->SetExpFogDensity(density);
+}
+
+void KoopaEngine::SetLinearFogStart(float start)
+{
+    this->renderer->SetLinearFogStart(start);
 }
 
 void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)

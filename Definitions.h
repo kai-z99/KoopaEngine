@@ -84,6 +84,13 @@ enum ToneFunction
 	EXPOSURE,
 };
 
+enum FogType
+{
+    LINEAR = 0,
+    EXPONENTIAL = 1,
+    EXPONENTIAL_SQUARED = 2
+};
+
 //directional light shadow frustum settings
 constexpr float D_FRUSTUM_SIZE = 10.0f;
 constexpr float D_NEAR_PLANE = 1.0f;

@@ -27,6 +27,10 @@ public:
     void SetCurrentNormalTexture(const char* path);
     void SetCurrentSpecularTexture(const char* path);
     void SetCurrentBaseSpecular(float specular);
+    void SetFogColor(Vec3 col);
+    void SetFogType(FogType type);
+    void SetExpFogDensity(float density);
+    void SetLinearFogStart(float start);
 
     void SetSkybox(const std::vector<const char*>& faces);
 

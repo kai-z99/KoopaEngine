@@ -107,10 +107,14 @@ namespace ShaderSources
     uniform int cascadeCount;                       //set once in constructor
     uniform mat4 cascadeLightSpaceMatrices[4];      //updated every frame in RenderCascadedShadowMap()
     uniform float farPlane;                         //updated every frame in SendCameraUniforms() (unnessesarily)
+    uniform float nearPlane;                        //updated every frame in SendCameraUniforms() (unnessesarily)
     uniform float pointShadowProjFarPlane;          //for point shadow calculation
     uniform vec3 viewPos;                           //updated every frame in SendCameraUniforms() 
     uniform mat4 view;                              //updated every frame in SendCameraUniforms() 
-
+    uniform int fogType;                                //SendOtherUniforms()
+    uniform vec3 fogColor;             //updated every frame in SendOtherUniforms(). ({0,0,0} means fog is disabled)
+    uniform float expFogDensity;                    //SendOTherUniforms()
+    uniform float linearFogStart;                   //SendOtherUniforms()
     //UNIQUE UNIFORMS --------------------------------------------------------------------
     //model properties (usingModel set by SendMaterialUniforms(), flags set in model creation)
     uniform bool usingModel; //false means using material
@@ -126,6 +130,8 @@ namespace ShaderSources
     vec3 ChooseDiffuse();
     vec3 ChooseNormal();
     vec3 ChooseSpecular();
+    float CalculateFogFactor();
+    float CalculateLinearFog();
 
     const float gamma = 2.2;
 
@@ -150,6 +156,13 @@ namespace ShaderSources
         //Ambient lighting
         vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse; 
         color += sceneAmbient;
+        
+        //atmospheric fog
+        if (fogColor != vec3(0.0f))
+        {
+            float fogFactor = CalculateFogFactor();
+            color = mix(fogColor, color, fogFactor);
+        }
 
         FragColor = vec4(color, 1.0f);
             
@@ -407,6 +420,62 @@ namespace ShaderSources
                 return vec3(material.baseSpecular);
             }
         }
+    }
+    
+    float CalculateLinearFog()
+    {
+        float fogStart = nearPlane + linearFogStart;
+        float fogEnd = farPlane;
+
+        float cameraToFragmentDist = length(viewPos - FragPos);
+        float fogRange = fogEnd - fogStart;
+        float fogDist = fogEnd - cameraToFragmentDist;
+        float fogFactor = clamp(fogDist / fogRange, 0.0f, 1.0f);
+        return fogFactor;
+    }
+        
+    float CalculateExponentialFog()
+    {
+        float cameraToFragDist = length(viewPos - FragPos);
+        // *4 since we want around 0 when frag is at max distance
+        // this is for average desntiy values like ~0.5
+        float distRatio = (4.0f * cameraToFragDist) / farPlane;
+        return exp(-distRatio * expFogDensity);
+    }
+
+    float CalculateExponentialSquaredFog()
+    {
+        float cameraToFragDist = length(viewPos - FragPos);
+        // *4 since we want around 0 when frag is at max distance
+        // this is for average desntiy values like ~0.5
+        float distRatio = (4.0f * cameraToFragDist) / farPlane;
+        
+        return exp(-distRatio * expFogDensity * distRatio * expFogDensity);
+    }
+
+    float CalculateFogFactor()
+    {
+        float fogFactor;    
+        
+        switch (fogType)
+        {
+            //linear
+            case 0:
+                fogFactor = CalculateLinearFog();
+                break;
+            
+            //exp
+            case 1:
+                fogFactor = CalculateExponentialFog();
+                break;
+            
+            //sqr exp
+            case 2:
+                fogFactor = CalculateExponentialSquaredFog();
+                break;
+        }
+        
+        return fogFactor;
     }
 
     )";
