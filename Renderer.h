@@ -62,6 +62,7 @@ private:
     //Render
     void RenderMainScene();
     void RenderShadowMaps();
+    void RenderSSAO();
 
     //Shader objects
     Shader* lightingShader; 
@@ -73,6 +74,8 @@ private:
     Shader* skyShader;
     Shader* blurShader;
     Shader* terrainShader;
+    Shader* geometryPassShader;
+    Shader* ssaoShader;
 
     //TEXTURES/MATERIAL
     Material currentMaterial;
@@ -149,6 +152,11 @@ private:
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
     void RenderPointShadowMap(unsigned int index);
     std::vector<glm::mat4> shadowTransforms;
+
+    //SSAO
+    std::vector<glm::vec3> ssaoKernel;
+    std::vector<glm::vec3> ssaoNoise;
+    unsigned int ssaoNoiseTexture;
     
     //DRAWING
     std::vector<DrawCall*> drawCalls;
@@ -178,4 +186,6 @@ private:
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
     unsigned int pointShadowMapFBO, pointShadowMapTextureArrayDepth; 
+    unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
+    unsigned int ssaoFBO, ssaoQuadTextureRGBA;
 };

@@ -14,6 +14,14 @@
 #include "Constants.h"
 
 #include <iostream>
+#include <random>
+
+
+//temp
+static inline float ourLerp(float a, float b, float f)
+{
+    return a + f * (b - a);
+}
 
 Renderer::Renderer()
 {
@@ -30,6 +38,47 @@ Renderer::Renderer()
     this->linearFogStart = 70.0f;
     this->fogType = EXPONENTIAL_SQUARED;
     
+    //TEMP
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between [0.0, 1.0]
+    std::default_random_engine generator;
+    for (unsigned int i = 0; i < 64; ++i)
+    {
+        glm::vec3 sample(
+            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) x
+            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) y
+            randomFloats(generator)              //( 0, 1) z (hemisphere)
+        );
+        sample = glm::normalize(sample); //direction
+        sample *= randomFloats(generator); //magnitude
+
+        //bias more near center of hemisphere
+        float scale = float(i) / 64.0f;
+        scale = ourLerp(0.1f, 1.0f, scale * scale);
+        sample *= scale;
+
+        this->ssaoKernel.push_back(sample); //TANGENT SPACE
+    }
+
+    for (unsigned int i = 0; i < 16; i++)
+    {
+        glm::vec3 noise =
+        {
+            randomFloats(generator) * 2.0 - 1.0,
+            randomFloats(generator) * 2.0 - 1.0,
+            0.0f
+        };
+
+        this->ssaoNoise.push_back(noise);
+    }
+
+    glGenTextures(1, &this->ssaoNoiseTexture);
+    glBindTexture(GL_TEXTURE_2D, this->ssaoNoiseTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, &this->ssaoNoise[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
     //shaders
     this->InitializeShaders();
 
@@ -51,6 +100,7 @@ Renderer::Renderer()
     //cascade
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
+
 }
 
 void Renderer::InitializeShaders()
@@ -68,6 +118,7 @@ void Renderer::InitializeShaders()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.specular"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4);
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "ssao"), 10);                
 
     //Stuff for cascade shadows
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeCount"), (unsigned int)this->cascadeLevels.size()); //3 (4 matrices)
@@ -115,6 +166,7 @@ void Renderer::InitializeShaders()
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "material.specular"), 2);     //GL_TEXTURE2
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeShadowMaps"), 4);
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "ssao"), 10);
     //Stuff for cascade shadows
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "cascadeCount"), (unsigned int)this->cascadeLevels.size()); //4 (5 matrices)
     for (int i = 0; i < this->cascadeLevels.size(); i++)
@@ -122,6 +174,26 @@ void Renderer::InitializeShaders()
         std::string l = "cascadeDistances[" + std::to_string(i) + "]";
         glUniform1f(glGetUniformLocation(this->terrainShader->ID, l.c_str()), this->cascadeLevels[i]);
     }
+
+    //gBuffer
+    this->geometryPassShader = new Shader(ShaderSources::vsGeometryPass, ShaderSources::fsGeometryPass);
+
+    //SSAAO shader
+    this->ssaoShader = new Shader(ShaderSources::vsSSAO, ShaderSources::fsSSAO);
+    this->ssaoShader->use();
+    glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "gNormal"), 0);              //GL_TEXTURE0
+    glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "gPosition"), 1);            //GL_TEXTURE1
+    glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "ssaoNoiseTexture"), 2);     //GL_TEXTURE2
+    glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenWidth"), SCREEN_WIDTH);
+    glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenHeight"), SCREEN_HEIGHT);
+
+    for (unsigned int i = 0; i < 64; ++i) //send sample kernels
+    {
+        std::string s = "samples[" + std::to_string(i) + "]";
+        const char* cs = s.c_str();
+        glUniform3fv(glGetUniformLocation(this->ssaoShader->ID, cs), 1, glm::value_ptr(ssaoKernel[i]));
+    }
+
 }
 
 void Renderer::SetupFramebuffers()
@@ -139,6 +211,10 @@ void Renderer::SetupFramebuffers()
     //Point shadows
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO);
     TextureSetup::SetupPointShadowMapTextureArray(this->pointShadowMapTextureArrayDepth, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+
+    //SSAO
+    FramebufferSetup::SetupGBufferFramebuffer(this->gBufferFBO, this->gNormalTextureRGBA, this->gPositionTextureRGBA);
+    FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureRGBA);
 }
 
 void Renderer::SetupVertexBuffers()
@@ -192,6 +268,9 @@ void Renderer::EndRenderFrame()
 {
     //RENDER SHADOW MAPS---
     this->RenderShadowMaps();
+
+    //Render the ssao Texture
+    this->RenderSSAO();
 
     //Render the main scene into hdrFBO texture (2 targets: main, bright)
     this->RenderMainScene();
@@ -271,6 +350,43 @@ void Renderer::RenderShadowMaps()
             this->RenderPointShadowMap(i);
         }
     }
+}
+
+void Renderer::RenderSSAO()
+{
+    //GBUFFER-------------------------------------------------
+    glBindFramebuffer(GL_FRAMEBUFFER, this->gBufferFBO);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    this->geometryPassShader->use();
+
+    for (DrawCall* d : this->drawCalls)
+    {
+        d->Render(this->geometryPassShader);
+    }
+    
+    //SSAO-------------------------------------------------
+    glBindFramebuffer(GL_FRAMEBUFFER, this->ssaoFBO);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    //viewport set
+
+    this->ssaoShader->use();
+
+    //Textures
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, this->gNormalTextureRGBA);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, this->gPositionTextureRGBA);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, this->ssaoNoiseTexture);
+
+    glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
+    glDrawArrays(GL_TRIANGLES, 0, 6); //drwa quad
+
+    glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 }
 
 void Renderer::DrawFinalQuad()
@@ -477,10 +593,6 @@ void Renderer::DrawSkybox()
         this->skyShader->use();
         glDepthFunc(GL_LEQUAL);
 
-        //just output to main hdr buffer, skybox should never have bloom
-        unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
-        glDrawBuffers(1, attachments);
-
         //draw
         glBindVertexArray(this->skyboxMeshData.VAO);
         glActiveTexture(GL_TEXTURE0);
@@ -489,9 +601,7 @@ void Renderer::DrawSkybox()
 
         //clean
         glBindVertexArray(0);
-        glDepthFunc(GL_LESS);
-        unsigned int attachments2[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-        glDrawBuffers(2, attachments2);
+        glDepthFunc(GL_LESS);;
     }
 }
 
@@ -532,7 +642,20 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     center /= corners.size();
 
     //View
-    glm::mat4 lightView = glm::lookAt(center - glm::normalize(this->dirLight.direction), center, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 worldUp = { 0.0f, 1.0f, 0.0f };
+
+    //Note: (0,-1,0) x (0,1,0) = 0, edge case inside lookat()
+    constexpr float threshold = 1.0f - std::numeric_limits<float>::epsilon() * 100; //~0.9999
+
+    //check if lightDir and worldUp are almost paralell or antiparralell
+    if (std::abs(glm::dot(glm::normalize(this->dirLight.direction), worldUp)) > threshold)
+    {
+        worldUp = { 0.0f, 0.0f, 1.0f };
+    }
+
+    //             subtract the negative of the lightDir from the center, moving the vector along -lightDir. (by 1 unit)
+    glm::mat4 lightView = glm::lookAt(center - 0.1f * glm::normalize(this->dirLight.direction), center, worldUp);
+    
     //Proj
     float minX = std::numeric_limits<float>::max();
     float maxX = std::numeric_limits<float>::lowest();
@@ -555,13 +678,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     float zMult = 10.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
-    
-    float offsetNear = 0.0f;
-    float offsetFar = 3.0f; //fixes bug where shadow disappears if your too close.
-
-    minZ -= offsetNear;
-    maxZ += offsetFar;
-    
+        
     glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
 
     return lightProjection * lightView;
@@ -636,8 +753,8 @@ void Renderer::RenderCascadedShadowMap()
         glUniformMatrix4fv(glGetUniformLocation(this->cascadeShadowShader->ID, "lightSpaceMatrix"), 1,
             false, glm::value_ptr(lightSpaceMatrices[i]));
        
-        static int count = 0;
-        if (count % 60 == 0) std::cout << "Draw calls culled in cascade mapping: " << count << '\n';
+        //static int count = 0;
+        //if (count % 60 == 0) std::cout << "Draw calls culled in cascade mapping: " << count << '\n';
 
         glm::vec4 frustumPlanes[6];
         //note: model matrix is sent in d->Render()
@@ -649,7 +766,6 @@ void Renderer::RenderCascadedShadowMap()
 
             if (!this->IsAABBVisible(worldAABB, frustumPlanes))
             {
-                count++;
                 continue;
             }
 
@@ -713,8 +829,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
         this->GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
-        static int count = 0;
-        if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
+        //static int count = 0;
+        //if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
         for (DrawCall* d : this->drawCalls)
@@ -722,7 +838,6 @@ void Renderer::RenderPointShadowMap(unsigned int index)
             AABB worldAABB = d->GetWorldAABB();
             if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
             {
-                count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
 
@@ -1059,6 +1174,13 @@ void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projec
     glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "viewPos"), 1, glm::value_ptr(position));
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "farPlane"), DEFAULT_FAR);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "nearPlane"), DEFAULT_NEAR);
+
+    this->geometryPassShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(geometryPassShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(geometryPassShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    this->ssaoShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(ssaoShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 }
 
 void Renderer::SendOtherUniforms()

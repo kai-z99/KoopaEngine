@@ -25,6 +25,8 @@ namespace FramebufferSetup
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h);
     void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, int numCascades);
     void SetupPointShadowMapFramebuffer(unsigned int& FBO);
+    void SetupGBufferFramebuffer(unsigned int& FBO, unsigned int& gNormal, unsigned int& gPosition);
+    void SetupSSAOFramebuffer(unsigned int& FBO, unsigned int& texture);
 }
 
 namespace TextureSetup
