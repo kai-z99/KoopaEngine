@@ -76,6 +76,7 @@ private:
     Shader* terrainShader;
     Shader* geometryPassShader;
     Shader* ssaoShader;
+    Shader* ssaoBlurShader;
 
     //TEXTURES/MATERIAL
     Material currentMaterial;
@@ -187,5 +188,5 @@ private:
     unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
     unsigned int pointShadowMapFBO, pointShadowMapTextureArrayDepth; 
     unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
-    unsigned int ssaoFBO, ssaoQuadTextureRGBA;
+    unsigned int ssaoFBO, ssaoBlurFBO, ssaoQuadTextureR, ssaoBlurTextureR;
 };

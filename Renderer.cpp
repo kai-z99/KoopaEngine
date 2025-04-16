@@ -41,7 +41,7 @@ Renderer::Renderer()
     //TEMP
     std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between [0.0, 1.0]
     std::default_random_engine generator;
-    for (unsigned int i = 0; i < 16; ++i)
+    for (unsigned int i = 0; i < 32; ++i)
     {
         glm::vec3 sample(
             randomFloats(generator) * 2.0 - 1.0, //(-1, 1) x
@@ -71,14 +71,6 @@ Renderer::Renderer()
         this->ssaoNoise.push_back(noise);
     }
 
-    glGenTextures(1, &this->ssaoNoiseTexture);
-    glBindTexture(GL_TEXTURE_2D, this->ssaoNoiseTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, &this->ssaoNoise[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
     //shaders
     this->InitializeShaders();
 
@@ -102,7 +94,7 @@ Renderer::Renderer()
     glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
     //ssao
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, this->ssaoQuadTextureRGBA);
+    glBindTexture(GL_TEXTURE_2D, this->ssaoBlurTextureR);
 
     glActiveTexture(GL_TEXTURE0);
 }
@@ -191,12 +183,16 @@ void Renderer::InitializeShaders()
     glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenWidth"), SCREEN_WIDTH);
     glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenHeight"), SCREEN_HEIGHT);
 
-    for (unsigned int i = 0; i < 16; ++i) //send sample kernels
+    for (unsigned int i = 0; i < 32; ++i) //send sample kernels
     {
         std::string s = "samples[" + std::to_string(i) + "]";
         const char* cs = s.c_str();
         glUniform3fv(glGetUniformLocation(this->ssaoShader->ID, cs), 1, glm::value_ptr(ssaoKernel[i]));
     }
+
+    //ssao blur
+    this->ssaoBlurShader = new Shader(ShaderSources::vsSSAO, ShaderSources::fsSSAOBlur);
+    glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "ssaoTexture"), 0);            //GL_TEXTURE0
 
 }
 
@@ -218,7 +214,9 @@ void Renderer::SetupFramebuffers()
 
     //SSAO
     FramebufferSetup::SetupGBufferFramebuffer(this->gBufferFBO, this->gNormalTextureRGBA, this->gPositionTextureRGBA);
-    FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureRGBA);
+    FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
+    FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
+    TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture);
 }
 
 void Renderer::SetupVertexBuffers()
@@ -385,6 +383,19 @@ void Renderer::RenderSSAO()
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, this->ssaoNoiseTexture);
 
+    glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
+    glDrawArrays(GL_TRIANGLES, 0, 6); //drwa quad
+
+    //BLUR------
+    glBindFramebuffer(GL_FRAMEBUFFER, this->ssaoBlurFBO);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    this->ssaoBlurShader->use();
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, this->ssaoQuadTextureR); //blurring
+
+    //whole screen
     glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
     glDrawArrays(GL_TRIANGLES, 0, 6); //drwa quad
 
@@ -773,8 +784,7 @@ void Renderer::RenderCascadedShadowMap()
                 continue;
             }
 
-            d->SetCulling(false);
-            d->Render(this->cascadeShadowShader);
+            d->Render(this->cascadeShadowShader, true);
         }
         glCullFace(GL_BACK);
     }
@@ -844,10 +854,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
             {
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
-
-            d->SetCulling(false);
-            d->Render(this->pointShadowShader);
-            d->SetCulling(true);
+            
+            d->Render(this->pointShadowShader, true);
         }
     }
 
@@ -974,7 +982,6 @@ void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
     this->drawCalls.push_back(new DrawCall(this->planeMeshData, this->currentMaterial, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
-    //TODO: How is this not being set to true in the shadow rendering?
 }
 
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)

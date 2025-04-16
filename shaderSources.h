@@ -43,7 +43,7 @@ namespace ShaderSources
     )";
 
     const char* fs1 = R"(
-   #version 420 core
+    #version 420 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
     layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
@@ -213,7 +213,7 @@ namespace ShaderSources
         if (fragDepth > 1.0f) return 0.0f;
             
         //BIAS (0.00035 is optimal NOTTT, no culling)
-        float bias = max(0.00015 * (1.0 - dot(normal, lightDir)), 0.000015); //more bias with more angle.
+        float bias = max(0.00025 * (1.0 - dot(normal, lightDir)), 0.000025); //more bias with more angle.
         //if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
         //else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
@@ -1054,13 +1054,13 @@ namespace ShaderSources
     uniform sampler2D gPosition;            //1
     uniform sampler2D ssaoNoiseTexture;     //2
 
-    uniform vec3 samples[16];            //hemisphere vectors in tangent space
+    uniform vec3 samples[32];            //hemisphere vectors in tangent space
     uniform mat4 projection;
     
     uniform float screenWidth;
     uniform float screenHeight;
 
-    float radius = 1.5f;
+    float radius = 1.75f;
 
     out float FragColor;
 
@@ -1082,7 +1082,7 @@ namespace ShaderSources
         
         float occlusion = 0.0f;
         
-        for (int i = 0; i < 16; i++)
+        for (int i = 0; i < 32; i++)
         {
             vec3 samplePosView = TBN * samples[i]; //hemisphere vector in tangent -> view-space
             samplePosView = fragPosView + samplePosView * radius; //true sample position (og frag + hemisphere vector) IN VIEWSPACE
@@ -1102,73 +1102,38 @@ namespace ShaderSources
             occlusion += (gPositionSampleDepthView >= samplePosView.z + bias ? 1.0 : 0.0) * rangeCheck;
         }   
         
-        occlusion = 1.0f - (occlusion / 16); //so we can directly multiply fragment in light shader
-	    FragColor = occlusion;
-    }             
+        occlusion = 1.0f - (occlusion / 32); //so we can directly multiply fragment in light shader
+        float power = 3.0f;
+	    FragColor = pow(occlusion, power);
+    }        
     )";
 
-}
 
-/*
-const char* tesTerrain = R"(
+
+    const char* fsSSAOBlur = R"(
     #version 420 core
-    layout (quads, fractional_odd_spacing, cw) in;
+    
+    out float FragColor;
 
-    uniform sampler2D heightMap;
-    uniform mat4 model;
-    uniform mat4 view;
-    uniform mat4 projection;
-
-    in vec2 TexCoords_TCS_OUT[]; //array of texture coords of the current patch where this current vertex is located.
-                        //since its quads, one in each corner. (Control points)
-        
-    out vec3 Normal;
-    out vec2 TexCoords;
-    out vec3 FragPos;
-    out float Height;
-
-    vec2 texelSize = 1.0f / textureSize(heightMap, 0);
-        
+    in vec2 TexCoords;
+    
+    uniform sampler2D ssaoTexture;
 
     void main()
     {
-        float u = gl_TessCoord.x;
-        float v = gl_TessCoord.y;
+        vec2 texelSize = 1.0 / vec2(textureSize(ssaoTexture, 0));
+        float result = 0.0f;
 
-        //texcoord control points
-        vec2 t00 = TexCoords_TCS_OUT[0];
-        vec2 t01 = TexCoords_TCS_OUT[1];
-        vec2 t10 = TexCoords_TCS_OUT[2];
-        vec2 t11 = TexCoords_TCS_OUT[3];
+        for (int x = -2; x < 2; x++) //dont include +x and +y since noise texture is 4x4
+        {
+            for (int y = -2; y < 2; y++)
+            {
+                vec2 offset = vec2(float(x), float(y)) * texelSize;
+                result += texture(ssaoTexture, TexCoords + offset).r;
+            }
+        }
 
-        //bilinear interpolate the tessCoord texCoord from control points
-        vec2 t0 = (t01 - t00) * u + t00;
-        vec2 t1 = (t11 - t10) * u + t10;
-        vec2 texCoord = (t1 - t0) * v + t0; //the texcoord of the current vertex based of its control points.
-            
-        Height = texture(heightMap, texCoord).r * 64.0f - 16.0f;
-            
-        //position control points
-        vec4 p00 = gl_in[0].gl_Position;
-        vec4 p01 = gl_in[1].gl_Position;
-        vec4 p10 = gl_in[2].gl_Position;
-        vec4 p11 = gl_in[3].gl_Position;
-            
-        //compute normals
-        vec4 uVec = p01 - p00;
-        vec4 vVec = p10 - p00;
-        vec4 normal = normalize( vec4(cross(vVec.xyz, uVec.xyz), 0) );
-            
-        //bilinear interpolate the vertexes position from control points
-        vec4 p0 = (p01 - p00) * u + p00;
-        vec4 p1 = (p11 - p10) * u + p10;
-        vec4 position = (p1 - p0) * v + p0;
-            
-        position += normal * Height;
-            
-        gl_Position = projection * view * model * position;
-        FragPos = vec3(model * position);
-        Normal = normalize(vec3(normal));
+        FragColor = result / (4.0f * 4.0f); //noise texture dimensions
     }
     )";
-*/
+}

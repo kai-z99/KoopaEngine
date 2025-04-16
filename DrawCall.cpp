@@ -35,11 +35,11 @@ DrawCall::DrawCall(Model* m, const glm::mat4 model)
     this->usingCulling = true;
 }
 
-void DrawCall::Render(Shader* shader)
+void DrawCall::Render(Shader* shader, bool tempDontCull)
 {
     shader->use();
 
-    if (usingCulling) glEnable(GL_CULL_FACE);
+    if (usingCulling && !tempDontCull) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
 
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
@@ -109,6 +109,7 @@ void DrawCall::SetCulling(bool enabled)
 {
     this->usingCulling = enabled;
 }
+
 
 const char* DrawCall::GetHeightMapPath()
 {

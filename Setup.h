@@ -27,11 +27,13 @@ namespace FramebufferSetup
     void SetupPointShadowMapFramebuffer(unsigned int& FBO);
     void SetupGBufferFramebuffer(unsigned int& FBO, unsigned int& gNormal, unsigned int& gPosition);
     void SetupSSAOFramebuffer(unsigned int& FBO, unsigned int& texture);
+
 }
 
 namespace TextureSetup
 {
     void SetupPointShadowMapTextureArray(unsigned int& textureArray, unsigned int w, unsigned int h);
+    void SetupSSAONoiseTexture(unsigned int& texture);
     unsigned int LoadTexture(char const* path);
     unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
 }

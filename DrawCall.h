@@ -15,7 +15,7 @@ public:
 	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
-	void Render(Shader* shader);
+	void Render(Shader* shader, bool tempDontCull = false);
 
 	//For "fs1" lighting shader
 	void BindMaterialUniforms(Shader* shader);
