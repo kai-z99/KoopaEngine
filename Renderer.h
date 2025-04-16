@@ -49,6 +49,7 @@ public:
     void SetFogColor(Vec3 col);
     void SetExpFogDensity(float density);
     void SetLinearFogStart(float start);
+    void SetAmbientLighting(float ambient);
 
 	//Light functions
     void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity, bool shadow);
@@ -96,6 +97,8 @@ private:
     std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
 
     //LIGHTING
+    float ambientLighting;
+
     void SetAndSendAllLightsToFalse();
     //point
     unsigned int currentFramePointLightCount;
@@ -116,7 +119,7 @@ private:
     PointLight pointLights[MAX_POINT_LIGHTS];
     void SendPointLightUniforms(Shader* shader, unsigned int index);
     void InitializePointLights();
-    float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
+    float SHADOW_PROJECTION_FAR = 50.0f, SHADOW_PROJECTION_NEAR = 0.1f;
     //directional
     struct DirLight
     {

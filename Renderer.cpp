@@ -76,6 +76,7 @@ Renderer::Renderer()
 
     //LIGHTING-------------------------------------------------
     //Initialialize lighting
+    this->ambientLighting = 0.015f;
     this->InitializePointLights();
     this->InitializeDirLight();
     this->currentFramePointLightCount = 0;
@@ -843,8 +844,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
 
         this->GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
-        //static int count = 0;
-        //if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
+        static int count = 0;
+        if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
         for (DrawCall* d : this->drawCalls)
@@ -852,6 +853,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
             AABB worldAABB = d->GetWorldAABB();
             if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
             {
+                //count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
             
@@ -954,6 +956,11 @@ void Renderer::SetExpFogDensity(float density)
 void Renderer::SetLinearFogStart(float start)
 {
     this->linearFogStart = start;
+}
+
+void Renderer::SetAmbientLighting(float ambient)
+{
+    this->ambientLighting = ambient;
 }
 
 static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
@@ -1201,12 +1208,14 @@ void Renderer::SendOtherUniforms()
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "fogType"), this->fogType);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "linearFogStart"), this->linearFogStart);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "sceneAmbient"), this->ambientLighting);
     
     this->terrainShader->use();
     glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "fogColor"), 1, glm::value_ptr(this->fogColor));
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "fogType"), this->fogType);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "linearFogStart"), this->linearFogStart);
+    glUniform1f(glGetUniformLocation(this->terrainShader->ID, "sceneAmbient"), this->ambientLighting);
 }
 
 /*

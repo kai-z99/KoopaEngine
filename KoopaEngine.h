@@ -31,6 +31,7 @@ public:
     void SetFogType(FogType type);
     void SetExpFogDensity(float density);
     void SetLinearFogStart(float start);
+    void SetAmbientLighting(float ambient);
 
     void SetSkybox(const std::vector<const char*>& faces);
 

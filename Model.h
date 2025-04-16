@@ -158,6 +158,8 @@ private:
         // diffuse: texture_diffuseN
         // specular: texture_specularN
         // normal: texture_normalN
+        
+
 
         // 1. diffuse maps
         vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");

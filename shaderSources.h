@@ -104,7 +104,8 @@ namespace ShaderSources
     uniform PointLight pointLights[4];
     uniform int numPointLights;
     uniform DirLight dirLight;
-
+    
+    uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
     uniform float cascadeDistances[3];              //set once in constructor
     uniform int cascadeCount;                       //set once in constructor
     uniform mat4 cascadeLightSpaceMatrices[4];      //updated every frame in RenderCascadedShadowMap()
@@ -162,7 +163,7 @@ namespace ShaderSources
         float occlusion = texture(ssao, ssaoUV).r;
 
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse * occlusion; 
+        vec3 sceneAmbient = vec3(sceneAmbient) * diffuse * occlusion; 
         color += sceneAmbient;
         
         //atmospheric fog
@@ -1060,7 +1061,7 @@ namespace ShaderSources
     uniform float screenWidth;
     uniform float screenHeight;
 
-    float radius = 1.75f;
+    float radius = 0.5f;
 
     out float FragColor;
 

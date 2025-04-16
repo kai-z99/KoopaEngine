@@ -143,6 +143,11 @@ void KoopaEngine::SetLinearFogStart(float start)
     this->renderer->SetLinearFogStart(start);
 }
 
+void KoopaEngine::SetAmbientLighting(float ambient)
+{
+    this->renderer->SetAmbientLighting(ambient);
+}
+
 void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)
 {
     this->renderer->SetSkybox(faces);
