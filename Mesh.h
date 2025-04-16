@@ -87,6 +87,13 @@ public:
         for (unsigned int i = 0; i < textures.size(); i++)
         {
             glActiveTexture(GL_TEXTURE5 + i); // active proper texture unit before binding
+
+            if (GL_TEXTURE5 + i >= GL_TEXTURE9)
+            {
+                std::cout << "WARNING: TOO MANY TEXTURES IN MODEL!\n";
+                break;
+            }
+                
             // retrieve texture number (the N in diffuse_textureN)
             string number;
             string name = textures[i].type;

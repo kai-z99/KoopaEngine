@@ -41,7 +41,7 @@ Renderer::Renderer()
     //TEMP
     std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between [0.0, 1.0]
     std::default_random_engine generator;
-    for (unsigned int i = 0; i < 64; ++i)
+    for (unsigned int i = 0; i < 16; ++i)
     {
         glm::vec3 sample(
             randomFloats(generator) * 2.0 - 1.0, //(-1, 1) x
@@ -52,7 +52,7 @@ Renderer::Renderer()
         sample *= randomFloats(generator); //magnitude
 
         //bias more near center of hemisphere
-        float scale = float(i) / 64.0f;
+        float scale = float(i) / 32.0f;
         scale = ourLerp(0.1f, 1.0f, scale * scale);
         sample *= scale;
 
@@ -100,7 +100,11 @@ Renderer::Renderer()
     //cascade
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
+    //ssao
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, this->ssaoQuadTextureRGBA);
 
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void Renderer::InitializeShaders()
@@ -187,7 +191,7 @@ void Renderer::InitializeShaders()
     glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenWidth"), SCREEN_WIDTH);
     glUniform1f(glGetUniformLocation(this->ssaoShader->ID, "screenHeight"), SCREEN_HEIGHT);
 
-    for (unsigned int i = 0; i < 64; ++i) //send sample kernels
+    for (unsigned int i = 0; i < 16; ++i) //send sample kernels
     {
         std::string s = "samples[" + std::to_string(i) + "]";
         const char* cs = s.c_str();

@@ -21,7 +21,7 @@ namespace ShaderSources
     out vec3 FragPos; //Frag pos in world position
     out vec3 Normal;
     out mat3 TBN; //TangentSpace -> WorldSpace
-    out vec4 FragPosDirLightSpace;
+    out vec4 FragPosClipSpace;
 
     void main()
     {
@@ -38,7 +38,7 @@ namespace ShaderSources
 
         Normal = N;
 
-        FragPosDirLightSpace = dirLightSpaceMatrix * model * vec4(aPos, 1.0);
+        FragPosClipSpace = gl_Position;
     }
     )";
 
@@ -85,6 +85,7 @@ namespace ShaderSources
     in vec3 Normal;
     in vec3 FragPos;
     in mat3 TBN;
+    in vec4 FragPosClipSpace;
         
     //SAMPLERS------------------------------------------------------------------------------------
     //material.diffuse;                              //0
@@ -139,8 +140,6 @@ namespace ShaderSources
 
     void main()
     {
-        float t = texture(ssao, TexCoords).r;
-
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);
     
@@ -156,9 +155,14 @@ namespace ShaderSources
         }
 
         color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
-    
+        
+        vec3 fragPosNDC = FragPosClipSpace.xyz / FragPosClipSpace.w; //perpective divide [-1,1]
+        fragPosNDC = fragPosNDC * 0.5f + 0.5f; //[0,1]
+        vec2 ssaoUV = fragPosNDC.xy;
+        float occlusion = texture(ssao, ssaoUV).r;
+
         //Ambient lighting
-        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse; 
+        vec3 sceneAmbient = vec3(0.015f, 0.015f, 0.015f) * diffuse * occlusion; 
         color += sceneAmbient;
         
         //atmospheric fog
@@ -871,6 +875,7 @@ namespace ShaderSources
     out vec3 FragPos;
     out float Height;
     out mat3 TBN;
+    out vec4 FragPosClipSpace;
 
     const vec2 worldTexelSize = vec2(1.0f, 1.0f);
     //For simplicity, texturesize is equivalnt to world size.
@@ -961,6 +966,7 @@ namespace ShaderSources
         TexCoords = currentTexCoord;
         Height = currentHeight;
         TBN = tbn;
+        FragPosClipSpace = gl_Position;
     }
     )";
 
@@ -1048,13 +1054,13 @@ namespace ShaderSources
     uniform sampler2D gPosition;            //1
     uniform sampler2D ssaoNoiseTexture;     //2
 
-    uniform vec3 samples[64];            //hemisphere vectors in tangent space
+    uniform vec3 samples[16];            //hemisphere vectors in tangent space
     uniform mat4 projection;
     
     uniform float screenWidth;
     uniform float screenHeight;
 
-    float radius = 0.5f;
+    float radius = 1.5f;
 
     out float FragColor;
 
@@ -1076,7 +1082,7 @@ namespace ShaderSources
         
         float occlusion = 0.0f;
         
-        for (int i = 0; i < 64; i++)
+        for (int i = 0; i < 16; i++)
         {
             vec3 samplePosView = TBN * samples[i]; //hemisphere vector in tangent -> view-space
             samplePosView = fragPosView + samplePosView * radius; //true sample position (og frag + hemisphere vector) IN VIEWSPACE
@@ -1096,7 +1102,7 @@ namespace ShaderSources
             occlusion += (gPositionSampleDepthView >= samplePosView.z + bias ? 1.0 : 0.0) * rangeCheck;
         }   
         
-        occlusion = 1.0f - (occlusion / 64);
+        occlusion = 1.0f - (occlusion / 16); //so we can directly multiply fragment in light shader
 	    FragColor = occlusion;
     }             
     )";

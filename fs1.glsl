@@ -6,7 +6,7 @@
     uniform sampler2D gPosition;            //1
     uniform sampler2D ssaoNoiseTexture;     //2
 
-    uniform vec3 samples[64];            //hemisphere vectors in tangent space
+    uniform vec3 samples[32];            //hemisphere vectors in tangent space
     uniform mat4 projection;
     
     uniform float screenWidth;
@@ -34,7 +34,7 @@
         
         float occlusion = 0.0f;
         
-        for (int i = 0; i < 64; i++)
+        for (int i = 0; i < 32; i++)
         {
             vec3 samplePosView = TBN * samples[i]; //hemisphere vector in tangent -> view-space
             samplePosView = fragPosView + samplePosView * radius; //true sample position (og frag + hemisphere vector) IN VIEWSPACE
@@ -54,6 +54,6 @@
             occlusion += (gPositionSampleDepthView >= samplePosView.z + bias ? 1.0 : 0.0) * rangeCheck;
         }   
         
-        occlusion = 1.0f - (occlusion / 64);
+        occlusion = 1.0f - (occlusion / 32);
 	    FragColor = occlusion;
     }
