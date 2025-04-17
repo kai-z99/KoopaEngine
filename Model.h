@@ -1,5 +1,4 @@
-#ifndef MODEL_H
-#define MODEL_H
+#pragma once
 
 #include <glad/glad.h> 
 
@@ -10,7 +9,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include "Mesh.h"
+#include "ModelMesh.h"
 #include "Shader.h"
 
 #include <string>
@@ -28,7 +27,7 @@ class Model
 public:
     // model data 
     vector<Texture> textures_loaded;	// stores all the textures loaded so far, optimization to make sure textures aren't loaded more than once.
-    vector<Mesh>    meshes;
+    vector<ModelMesh>    meshes;
     string directory;
     AABB aabb;
     bool gammaCorrection;
@@ -37,20 +36,11 @@ public:
     Model(string const& path, bool gamma = false) : gammaCorrection(gamma)
     {
         loadModel(path);
-        this->calculateAABB();
     }
 
-    // draws the model, and thus all its meshes
-    void Draw(Shader& shader)
+    std::vector<ModelMesh> GetMeshes() const
     {
-        for (unsigned int i = 0; i < meshes.size(); i++)
-        {
-            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasNormalMap"), meshes[i].hasNormalMap);
-            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasDiffuseMap"), meshes[i].hasDiffuseMap);
-            glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasSpecularMap"), meshes[i].hasSpecularMap);
-            meshes[i].Draw(shader);
-        }
-            
+        return this->meshes;
     }
 
 private:
@@ -92,13 +82,13 @@ private:
 
     }
 
-    Mesh processMesh(aiMesh* mesh, const aiScene* scene)
+    ModelMesh processMesh(aiMesh* mesh, const aiScene* scene)
     {
         // data to fill
         vector<Vertex> vertices;
         vector<unsigned int> indices;
         vector<Texture> textures;
-
+                            
         // walk through each of the mesh's vertices
         for (unsigned int i = 0; i < mesh->mNumVertices; i++)
         {
@@ -159,8 +149,6 @@ private:
         // specular: texture_specularN
         // normal: texture_normalN
         
-
-
         // 1. diffuse maps
         vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
         textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
@@ -175,7 +163,7 @@ private:
         textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
 
         // return a mesh object created from the extracted mesh data
-        return Mesh(vertices, indices, textures);
+        return ModelMesh(vertices, indices, textures);
     }
 
     // checks all material textures of a given type and loads the textures if they're not loaded yet.
@@ -211,6 +199,8 @@ private:
         return textures;
     }
 
+    //REMOVE THIS, WE WORK ON INDIVIDUAL MESHES ONLY
+    /*
     void calculateAABB()
     {
         if (this->meshes.empty()) 
@@ -227,6 +217,7 @@ private:
             aabb.expand(meshes[i].aabb);
         }
     }
+    */
 };
 
 unsigned int TextureFromFile(const char* path, const string& directory, bool gamma)
@@ -268,4 +259,20 @@ unsigned int TextureFromFile(const char* path, const string& directory, bool gam
 
     return textureID;
 }
-#endif
+
+
+// draws the model, and thus all its meshes
+//REMOVE THIS
+/*
+void Draw(Shader& shader)
+{
+    for (unsigned int i = 0; i < meshes.size(); i++)
+    {
+        glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasNormalMap"), meshes[i].hasNormalMap);
+        glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasDiffuseMap"), meshes[i].hasDiffuseMap);
+        glUniform1i(glGetUniformLocation(shader.ID, "modelMeshHasSpecularMap"), meshes[i].hasSpecularMap);
+        meshes[i].Draw(shader);
+    }
+
+}
+*/

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include "KoopaMath.h"
 
-
 struct AABB
 {
     Vec3 min;
@@ -43,7 +42,8 @@ struct AABB
 struct MeshData
 {
     unsigned int VAO;
-    unsigned int vertexCount;
+    unsigned int vertexCount = 0; //for normal draw
+    unsigned int indexCount = 0; //for index draw
     AABB aabb;
 };
 

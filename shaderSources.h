@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 namespace ShaderSources
 {
@@ -51,6 +51,7 @@ namespace ShaderSources
         vec3 position;   
         vec3 color; 
         float intensity;
+        float range;
         bool isActive;
         bool castShadows;
     };  
@@ -93,38 +94,37 @@ namespace ShaderSources
     //material.specular;                             //2
     uniform samplerCubeArray pointShadowMapArray;    //3
     uniform sampler2DArray cascadeShadowMaps;        //4
-    uniform sampler2D texture_diffuse1;              //5-8
-    uniform sampler2D texture_specular1;             //5-8
-    uniform sampler2D texture_normal1;               //5-8
-    uniform sampler2D texture_height1;               //5-8
+    //FREE
+    //FREE
+    //FREE
+    //FREE
     //TERRAIN TEXTURE                                //9
     uniform sampler2D ssao;                          //10
     
     //SHARED UNIFORMS---------------------------------------------------------------------
+    //light
     uniform PointLight pointLights[4];
     uniform int numPointLights;
     uniform DirLight dirLight;
-    
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
+    uniform float bloomThreshold;
+    //shadow
     uniform float cascadeDistances[3];              //set once in constructor
     uniform int cascadeCount;                       //set once in constructor
     uniform mat4 cascadeLightSpaceMatrices[4];      //updated every frame in RenderCascadedShadowMap()
-    uniform float farPlane;                         //updated every frame in SendCameraUniforms() (unnessesarily)
-    uniform float nearPlane;                        //updated every frame in SendCameraUniforms() (unnessesarily)
     uniform float pointShadowProjFarPlane;          //for point shadow calculation
+    //camera
+    uniform float farPlane;                         //updated every frame in SendCameraUniforms() (unnessesarily)
+    uniform float nearPlane;                        //updated every frame in SendCameraUniforms() (unnessesarily
     uniform vec3 viewPos;                           //updated every frame in SendCameraUniforms() 
     uniform mat4 view;                              //updated every frame in SendCameraUniforms() 
+    //fog
     uniform int fogType;                            //SendOtherUniforms()
     uniform vec3 fogColor;             //updated every frame in SendOtherUniforms(). ({0,0,0} means fog is disabled)
     uniform float expFogDensity;                    //SendOTherUniforms()
     uniform float linearFogStart;                   //SendOtherUniforms()
 
     //UNIQUE UNIFORMS --------------------------------------------------------------------
-    //model properties (usingModel set by SendMaterialUniforms(), flags set in model creation)
-    uniform bool usingModel; //false means using material
-    uniform bool modelMeshHasDiffuseMap;
-    uniform bool modelMeshHasNormalMap;
-    uniform bool modelMeshHasSpecularMap;
     //material properties (Set by SendMaterialUniforms())
     uniform Material material;
     uniform bool usingDiffuseMap;
@@ -176,7 +176,7 @@ namespace ShaderSources
         FragColor = vec4(color, 1.0f);
             
         float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        if (brightness > 1.0) BrightColor = vec4(color, 1.0f);
+        if (brightness > bloomThreshold) BrightColor = vec4(color, 1.0f);
         else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
@@ -249,7 +249,7 @@ namespace ShaderSources
         
         float shadow = 0.0f;
         float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
-            
+
         //PCF---
         int samples = 20;
         float viewDistance = length(viewPos - fragPos);
@@ -289,10 +289,13 @@ namespace ShaderSources
         float spec;
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
             
-        // attenuation
+        // attenuation 
         float distance    = length(light.position - fragPos);
-        float attenuation = 1.0 / (distance * distance); //quadratic attenuation
-
+        float maxDistance = (farPlane / 7.5f) * (light.range / 100.0f); //0: no light, 100: max reach
+        if (maxDistance <= 0.0f) return vec3(0.0f);
+        
+        float t = clamp(1.0f - (distance / maxDistance), 0.0f, 1.0f);
+        float attenuation = t * t; //quadratic attenuation
         // combine results
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
         vec3 specular = light.intensity * light.color  * spec * baseSpecular;
@@ -348,87 +351,44 @@ namespace ShaderSources
     //Helper functions 
     vec3 ChooseDiffuse()
     {
-        if (usingModel)
+
+        if (usingDiffuseMap)
         {
-            if (modelMeshHasDiffuseMap)
-            {
-                return pow(texture(texture_diffuse1, TexCoords).rgb, vec3(gamma));  
-            }
-            else
-            {
-                return vec3(1.0f);
-            }
+            //convert to linear space
+            return pow(texture(material.diffuse, TexCoords).rgb, vec3(gamma));
         }
         else
         {
-            if (usingDiffuseMap)
-            {
-                //convert to linear space
-                return pow(texture(material.diffuse, TexCoords).rgb, vec3(gamma));
-            }
-            else
-            {
-                return material.baseColor;
-            }
+            return material.baseColor;
         }
+    
     }
 
     vec3 ChooseNormal()
     {
-        if (usingModel)
+        if (usingNormalMap)
         {
-            if (modelMeshHasNormalMap) //if the current mesh being drawn has a normal map, use that.
-            {
-                vec3 normal = texture(texture_normal1, TexCoords).rgb;
-                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-                return normal;
-            }
-            else //otherwise use the normals in the vertex data.
-            {
-                return normalize(Normal); 
-            }
+            vec3 normal = texture(material.normal, TexCoords).rgb;
+            normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+            normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
+            return normal;
         }
         else
         {
-            if (usingNormalMap)
-            {
-                vec3 normal = texture(material.normal, TexCoords).rgb;
-                normal = normal * 2.0f - 1.0f; //[0,1] -> [-1, 1]
-                normal = normalize(TBN * normal); //Tangent -> World (tbn is constucted with model matrix)
-                return normal;
-            }
-            else
-            {
-                return normalize(Normal);
-            }  
-        }
+            return normalize(Normal);
+        }  
     }
 
     vec3 ChooseSpecular()
     {
-        if (usingModel)
+        if (usingSpecularMap)
         {
-            if (modelMeshHasSpecularMap)
-            {
-                return vec3(texture(texture_specular1, TexCoords).r);
-            }
-            else
-            {
-                return vec3(1.0f);
-            }
+            return vec3(texture(material.specular, TexCoords).r);
         }
         else
         {
-            if (usingSpecularMap)
-            {
-                return vec3(texture(material.specular, TexCoords).r);
-            }
-            else
-            {
-                return vec3(material.baseSpecular);
-            }
-        }
+            return vec3(material.baseSpecular);
+        }   
     }
     
     float CalculateLinearFog()
@@ -461,7 +421,7 @@ namespace ShaderSources
         
         return exp(-distRatio * expFogDensity * distRatio * expFogDensity);
     }
-
+    
     float CalculateFogFactor()
     {
         float fogFactor;    
@@ -496,13 +456,14 @@ namespace ShaderSources
         
     uniform vec3 lightColor;
     uniform float intensity;
+    uniform float bloomThreshold;
 
     void main()
     {
         FragColor = vec4(intensity * lightColor, 1.0); // a cube, that doesnt acutally emit light remember its purely a visual
             
         float brightness = dot(FragColor.rgb, vec3(0.2126f, 0.7152f, 0.0722f)); //Luminance formula, based on human vision
-        if (brightness > 1.0) BrightColor = vec4(lightColor, 1.0f);
+        if (brightness > bloomThreshold) BrightColor = vec4(lightColor, 1.0f);
         else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     )";

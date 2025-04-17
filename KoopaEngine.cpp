@@ -148,6 +148,11 @@ void KoopaEngine::SetAmbientLighting(float ambient)
     this->renderer->SetAmbientLighting(ambient);
 }
 
+void KoopaEngine::SetBloomThreshold(float threshold)
+{
+    this->renderer->SetBloomThreshold(threshold);
+}
+
 void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)
 {
     this->renderer->SetSkybox(faces);
@@ -188,9 +193,9 @@ void KoopaEngine::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotati
     this->renderer->DrawTerrain(path, pos, size, rotation);
 }
 
-void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float intensity, bool shadows)
+void KoopaEngine::DrawPointLight(Vec3 pos, Vec3 col, float range, float intensity, bool shadows)
 {
-    this->renderer->AddPointLightToFrame(pos, col, intensity, shadows);
+    this->renderer->AddPointLightToFrame(pos, col, range, intensity, shadows);
 }
 
 void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity, bool shadows)

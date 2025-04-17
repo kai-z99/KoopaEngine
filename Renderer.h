@@ -50,9 +50,10 @@ public:
     void SetExpFogDensity(float density);
     void SetLinearFogStart(float start);
     void SetAmbientLighting(float ambient);
+    void SetBloomThreshold(float threshold);
 
 	//Light functions
-    void AddPointLightToFrame(Vec3 pos,Vec3 col, float intensity, bool shadow);
+    void AddPointLightToFrame(Vec3 pos,Vec3 col, float range, float intensity, bool shadow);
     void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow);
     bool drawDebugLights;
 
@@ -98,6 +99,7 @@ private:
 
     //LIGHTING
     float ambientLighting;
+    float bloomThreshold;
 
     void SetAndSendAllLightsToFalse();
     //point
@@ -106,20 +108,21 @@ private:
     {
         glm::vec3 position;
         glm::vec3 color;
+        float range;
         float intensity;
         bool isActive;
         bool castShadows;
 
         PointLight()
-            : position(0.0f), color(1.0f), intensity(1.0f), isActive(false), castShadows(false) {}
+            : position(0.0f), color(1.0f), range(2.0f), intensity(1.0f), isActive(false), castShadows(false) {}
 
-        PointLight(const glm::vec3& pos, const glm::vec3& col, float intensity, bool active, bool shadow)
-            : position(pos), color(col), intensity(intensity), isActive(active), castShadows(shadow) {}
+        PointLight(const glm::vec3& pos, const glm::vec3& col, float range, float intensity, bool active, bool shadow)
+            : position(pos), color(col), range(range), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
     void SendPointLightUniforms(Shader* shader, unsigned int index);
     void InitializePointLights();
-    float SHADOW_PROJECTION_FAR = 50.0f, SHADOW_PROJECTION_NEAR = 0.1f;
+    float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
     //directional
     struct DirLight
     {

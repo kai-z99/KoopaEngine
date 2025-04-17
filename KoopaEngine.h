@@ -32,6 +32,7 @@ public:
     void SetExpFogDensity(float density);
     void SetLinearFogStart(float start);
     void SetAmbientLighting(float ambient);
+    void SetBloomThreshold(float threshold);
 
     void SetSkybox(const std::vector<const char*>& faces);
 
@@ -85,6 +86,7 @@ public:
     (
         Vec3 pos = {0,0,0},
         Vec3 col = {1,1,1},
+        float range = 1.0f,
         float intensity = 1.0f,
         bool shadows = false
     );

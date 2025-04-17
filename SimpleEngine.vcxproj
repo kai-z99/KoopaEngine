@@ -145,7 +145,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h" />
-    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="ModelMesh.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="Setup.h" />
     <ClInclude Include="Camera.h" />
@@ -161,6 +161,7 @@
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Constants.cpp" />
     <ClCompile Include="Setup.cpp" />
     <ClCompile Include="DrawCall.cpp" />
     <ClCompile Include="glad\glad.c">

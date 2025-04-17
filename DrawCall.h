@@ -12,13 +12,14 @@ class DrawCall
 {
 public:
 	DrawCall(MeshData meshData, Material material, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
-	DrawCall(Model* m, const glm::mat4 model);
 
 	//Draw
 	void Render(Shader* shader, bool tempDontCull = false);
 
 	//For "fs1" lighting shader
 	void BindMaterialUniforms(Shader* shader);
+
+	void SetLODMesh(MeshData meshData);
 
 	//General flags
 	void SetCulling(bool enabled);
@@ -31,9 +32,7 @@ public:
 
 private:
 	//Mesh Data
-	unsigned int VAO;
-	unsigned int vertexCount;
-	AABB aabb;
+	MeshData meshData;
 	glm::mat4 modelMatrix;
 	GLenum primitive;
 
@@ -45,7 +44,4 @@ private:
 
 	//General flags
 	bool usingCulling;
-
-	//Drawing a predefined model
-	Model* model;
 };

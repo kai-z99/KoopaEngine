@@ -54,7 +54,7 @@
     <ClInclude Include="Definitions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Mesh.h">
+    <ClInclude Include="ModelMesh.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="Model.h">
@@ -84,6 +84,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Setup.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Constants.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

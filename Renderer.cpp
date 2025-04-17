@@ -11,11 +11,9 @@
 #include "Setup.h"
 #include "Camera.h"
 #include "Model.h"
-#include "Constants.h"
 
 #include <iostream>
 #include <random>
-
 
 //temp
 static inline float ourLerp(float a, float b, float f)
@@ -76,6 +74,7 @@ Renderer::Renderer()
 
     //LIGHTING-------------------------------------------------
     //Initialialize lighting
+    this->bloomThreshold = 1.0f;
     this->ambientLighting = 0.015f;
     this->InitializePointLights();
     this->InitializeDirLight();
@@ -848,17 +847,19 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
+        glCullFace(GL_FRONT);      // <<< CULL the _front_ faces
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
             if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
             {
-                //count++;
+                count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
             
             d->Render(this->pointShadowShader, true);
         }
+        glCullFace(GL_BACK);       // restore
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -963,6 +964,11 @@ void Renderer::SetAmbientLighting(float ambient)
     this->ambientLighting = ambient;
 }
 
+void Renderer::SetBloomThreshold(float threshold)
+{
+    this->bloomThreshold = threshold;
+}
+
 static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const Vec3& scale)
 {
     glm::mat4 model = glm::mat4(1.0f);
@@ -1010,9 +1016,12 @@ void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size
     stbi_set_flip_vertically_on_load(false);
 
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->pathToModel[path], model));
 
-    stbi_set_flip_vertically_on_load(false);
+    //for every mesh in the model, create a drawcall
+    for (ModelMesh& mesh : this->pathToModel[path]->meshes)
+    {
+        this->drawCalls.push_back(new DrawCall(mesh.GetMeshData(), mesh.GetMaterial(), model));
+    }
 }
 
 void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
@@ -1054,7 +1063,7 @@ void Renderer::DrawLightsDebug()
     }
 }
 
-void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity, bool shadow)
+void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow)
 {
     unsigned int i = this->currentFramePointLightCount;
 
@@ -1064,6 +1073,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float intensity, bool sh
         this->pointLights[i].isActive = true;
         this->pointLights[i].position = { pos.x, pos.y, pos.z };
         this->pointLights[i].color = { col.r, col.g, col.b };
+        this->pointLights[i].range = std::min(range, 100.0f);
         this->pointLights[i].intensity = intensity;
         this->pointLights[i].castShadows = shadow;
         
@@ -1133,6 +1143,10 @@ void Renderer::SendPointLightUniforms(Shader* shader, unsigned int index)
     s = "pointLights[" + std::to_string(index) + "].intensity";
     const char* csi = s.c_str();
     glUniform1f(glGetUniformLocation(shader->ID, csi), this->pointLights[index].intensity);
+
+    s = "pointLights[" + std::to_string(index) + "].range";
+    const char* csr = s.c_str();
+    glUniform1f(glGetUniformLocation(shader->ID, csr), this->pointLights[index].range);
 
     s = "pointLights[" + std::to_string(index) + "].castShadows";
     const char* css = s.c_str();
@@ -1209,6 +1223,7 @@ void Renderer::SendOtherUniforms()
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "linearFogStart"), this->linearFogStart);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "sceneAmbient"), this->ambientLighting);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "bloomThreshold"), this->bloomThreshold);
     
     this->terrainShader->use();
     glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "fogColor"), 1, glm::value_ptr(this->fogColor));
@@ -1216,6 +1231,10 @@ void Renderer::SendOtherUniforms()
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "linearFogStart"), this->linearFogStart);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "sceneAmbient"), this->ambientLighting);
+    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "bloomThreshold"), this->bloomThreshold);
+
+    this->debugLightShader->use();
+    glUniform1f(glGetUniformLocation(this->debugLightShader->ID, "bloomThreshold"), this->bloomThreshold);
 }
 
 /*

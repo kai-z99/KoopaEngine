@@ -281,7 +281,6 @@ namespace VertexBufferSetup
         return result;
     }
 
-
     MeshData SetupPlaneBuffers()
     {
         unsigned int VAO, VBO;
@@ -774,7 +773,7 @@ namespace TextureSetup
         glGenTextures(1, &textureArray);
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
 
-        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_DEPTH_COMPONENT, w, h, MAX_POINT_LIGHTS * 6, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_DEPTH_COMPONENT32, w, h, MAX_POINT_LIGHTS * 6, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 
         //  parameters
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -882,11 +881,6 @@ namespace TextureSetup
         return textureID;
     }
 }
-
-
-
-
-
 
 
 

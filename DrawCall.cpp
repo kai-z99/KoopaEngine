@@ -3,36 +3,20 @@
 #include "Shader.h"
 #include "Model.h"
 
-
 DrawCall::DrawCall(MeshData meshData, Material material, const glm::mat4& model, GLenum primitive)
 {
-    this->model = nullptr; //if this stays null, we are not drawing a model.
     this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
 
     //general data
-    this->VAO = meshData.VAO;
-    this->vertexCount = meshData.vertexCount;
-    this->aabb = meshData.aabb;
+    this->meshData = meshData;
     this->modelMatrix = model;
     this->primitive = primitive;
-    this->aabb = meshData.aabb;
-
+    
     //general flags
     this->usingCulling = true;
 
     //Material properties
     this->material = material;
-}
-
-DrawCall::DrawCall(Model* m, const glm::mat4 model)
-{
-    this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
-    this->model = m;
-    this->modelMatrix = model;
-    this->aabb = m->aabb;
-
-    //general flags
-    this->usingCulling = true;
 }
 
 void DrawCall::Render(Shader* shader, bool tempDontCull)
@@ -44,15 +28,34 @@ void DrawCall::Render(Shader* shader, bool tempDontCull)
 
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
 
-    if (this->model != nullptr)
+    glBindVertexArray(this->meshData.VAO);
+    /*
+    GLint boundEBO = 0;
+    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &boundEBO);
+
+    if (boundEBO != 0) //draw with glDrawElements
     {
-        this->model->Draw(*shader);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundEBO);
+
+        GLint bytesize = 0;
+        glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &bytesize);
+
+        unsigned int indicesSize = bytesize / sizeof(GLint);
+
+        glDrawElements(this->primitive, indicesSize, GL_UNSIGNED_INT, 0);
+    }
+    */
+
+    if (this->meshData.indexCount != 0)
+    {
+        //we are drawing with an EBO
+        glDrawElements(this->primitive, this->meshData.indexCount, GL_UNSIGNED_INT, 0);
     }
     else
     {
-        glBindVertexArray(VAO);
-        glDrawArrays(this->primitive, 0, this->vertexCount);
+        glDrawArrays(this->primitive, 0, this->meshData.vertexCount);
     }
+    
     
     glEnable(GL_CULL_FACE);
     glBindVertexArray(0);
@@ -62,16 +65,6 @@ void DrawCall::Render(Shader* shader, bool tempDontCull)
 void DrawCall::BindMaterialUniforms(Shader* shader)
 {
     shader->use();
-
-    if (this->model != nullptr)
-    {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingModel"), 1);
-        return; //Model has its own version of the stuff below.
-    }
-    else
-    {
-        glUniform1i(glGetUniformLocation(shader->ID, "usingModel"), 0);
-    }
 
     // Send base values. (these always exist)
     Vec3 baseColor = this->material.baseColor;
@@ -105,11 +98,16 @@ void DrawCall::BindMaterialUniforms(Shader* shader)
     }
 }
 
+void DrawCall::SetLODMesh(MeshData meshData)
+{
+
+
+}
+
 void DrawCall::SetCulling(bool enabled)
 {
     this->usingCulling = enabled;
 }
-
 
 const char* DrawCall::GetHeightMapPath()
 {
@@ -118,15 +116,16 @@ const char* DrawCall::GetHeightMapPath()
 
 void DrawCall::SetHeightMapPath(const char* path)
 {
-    assert(this->model == nullptr);
     this->heightMapPath = path;
 }
 
 AABB DrawCall::GetWorldAABB() const
 {
+    AABB aabb = this->meshData.aabb;
+
     //Vec3 -> glm::vec3
-    glm::vec3 min = glm::vec3(this->aabb.min.x, this->aabb.min.y, this->aabb.min.z);
-    glm::vec3 max = glm::vec3(this->aabb.max.x, this->aabb.max.y, this->aabb.max.z);
+    glm::vec3 min = glm::vec3(aabb.min.x, aabb.min.y, aabb.min.z);
+    glm::vec3 max = glm::vec3(aabb.max.x, aabb.max.y, aabb.max.z);
 
     std::vector<glm::vec3> corners =
     {
