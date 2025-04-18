@@ -27,49 +27,17 @@ Renderer::Renderer()
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE);    
 
-    //Static setup                                                 
+    //initial setup   
+    this->drawCalls = {};                                             
     this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f };
-    this->drawCalls = {};
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
     this->fogColor = glm::vec3(0.0f); //disabled
     this->expFogDensity = 0.15f;
     this->linearFogStart = 70.0f;
     this->fogType = EXPONENTIAL_SQUARED;
+    this->msaa = true;
     
-    //TEMP
-    std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between [0.0, 1.0]
-    std::default_random_engine generator;
-    for (unsigned int i = 0; i < 32; ++i)
-    {
-        glm::vec3 sample(
-            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) x
-            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) y
-            randomFloats(generator)              //( 0, 1) z (hemisphere)
-        );
-        sample = glm::normalize(sample); //direction
-        sample *= randomFloats(generator); //magnitude
-
-        //bias more near center of hemisphere
-        float scale = float(i) / 32.0f;
-        scale = ourLerp(0.1f, 1.0f, scale * scale);
-        sample *= scale;
-
-        this->ssaoKernel.push_back(sample); //TANGENT SPACE
-    }
-
-    for (unsigned int i = 0; i < 16; i++)
-    {
-        glm::vec3 noise =
-        {
-            randomFloats(generator) * 2.0 - 1.0,
-            randomFloats(generator) * 2.0 - 1.0,
-            0.0f
-        };
-
-        this->ssaoNoise.push_back(noise);
-    }
-
     //shaders
     this->InitializeShaders();
 
@@ -180,6 +148,7 @@ void Renderer::InitializeShaders()
     this->geometryPassShader = new Shader(ShaderSources::vsGeometryPass, ShaderSources::fsGeometryPass);
 
     //SSAAO shader
+    this->SetupSSAOData();
     this->ssaoShader = new Shader(ShaderSources::vsSSAO, ShaderSources::fsSSAO);
     this->ssaoShader->use();
     glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "gNormal"), 0);              //GL_TEXTURE0
@@ -208,8 +177,10 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupHalfResBrightFramebuffer(this->halfResBrightFBO, this->halfResBrightTextureRGBA);
     FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
 
+    /*
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth,
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
+    */
 
     FramebufferSetup::SetupCascadedShadowMapFramebuffer(this->cascadeShadowMapFBO, this->cascadeShadowMapTextureArrayDepth,
         this->CASCADE_SHADOW_WIDTH, this->CASCADE_SHADOW_HEIGHT, (int)this->cascadeLevels.size() + 1);
@@ -223,6 +194,43 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
     TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture);
+}
+
+void Renderer::SetupSSAOData()
+{
+    //TEMP
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between [0.0, 1.0]
+    std::default_random_engine generator;
+    for (unsigned int i = 0; i < 32; ++i)
+    {
+        glm::vec3 sample(
+            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) x
+            randomFloats(generator) * 2.0 - 1.0, //(-1, 1) y
+            randomFloats(generator)              //( 0, 1) z (hemisphere)
+        );
+        sample = glm::normalize(sample); //direction
+        sample *= randomFloats(generator); //magnitude
+
+        //bias more near center of hemisphere
+        float scale = float(i) / 32.0f;
+        scale = ourLerp(0.1f, 1.0f, scale * scale);
+        sample *= scale;
+
+        this->ssaoKernel.push_back(sample); //TANGENT SPACE
+    }
+
+    for (unsigned int i = 0; i < 16; i++)
+    {
+        glm::vec3 noise =
+        {
+            randomFloats(generator) * 2.0 - 1.0,
+            randomFloats(generator) * 2.0 - 1.0,
+            0.0f
+        };
+
+        this->ssaoNoise.push_back(noise);
+    }
+
 }
 
 void Renderer::SetupVertexBuffers()
@@ -626,7 +634,8 @@ void Renderer::DrawSkybox()
 {
     if (this->usingSkybox)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
+        glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         this->skyShader->use();
         glDepthFunc(GL_LEQUAL);
@@ -713,8 +722,10 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
         maxZ = std::max(maxZ, cLightSpace.z);
     }
 
+    //'#include "pch.h"'
+
     //Pull in near plane, push out far plane
-    float zMult = 20.0f;
+    float zMult = 10.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
         
@@ -803,12 +814,12 @@ void Renderer::RenderCascadedShadowMap()
             AABB worldAABB = d->GetWorldAABB();
             this->GetFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
 
-            if (!this->IsAABBVisible(worldAABB, frustumPlanes) && FRUSTUM_CULLING)
+            if (FRUSTUM_CULLING && !this->IsAABBVisible(worldAABB, frustumPlanes))
             {
                 continue;
             }
 
-            d->RenderLOD(this->cascadeShadowShader, false);
+            d->RenderLOD(this->cascadeShadowShader, true);
         }
         glCullFace(GL_BACK);
     }
@@ -875,14 +886,14 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
-            if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes) && FRUSTUM_CULLING)
+            if (FRUSTUM_CULLING && !this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes) )
             {
                 count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
             
             //d->Render(this->pointShadowShader, true);
-            d->RenderLOD(this->pointShadowShader, false);
+            d->RenderLOD(this->pointShadowShader, true);
         }
         glCullFace(GL_BACK);       // restore
     }

@@ -25,9 +25,7 @@ public:
     void BeginRenderFrame();
     void EndRenderFrame();
 
-    //Geometry drawing functions
-    void SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
-    void SendOtherUniforms();
+    //Drawing Functions
     void ClearScreen(Vec4 col);
     void DrawTriangle(Vec3 pos, Vec4 rotation);
     void DrawCube(Vec3 pos, Vec3 size, Vec4 rotation);
@@ -36,7 +34,16 @@ public:
     void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
 
-    //Modification functions
+    //Lighting
+    void AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow);
+    void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow);
+    bool drawDebugLights;
+
+    //uniform updates
+    void SendCameraUniforms(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& position);
+    void SendOtherUniforms();
+
+    //Material and Post processing settings
     void ResetMaterial();
     void SetCurrentDiffuse(const char* path);
     void SetCurrentBaseColor(Vec3 col);
@@ -52,21 +59,25 @@ public:
     void SetAmbientLighting(float ambient);
     void SetBloomThreshold(float threshold);
 
-	//Light functions
-    void AddPointLightToFrame(Vec3 pos,Vec3 col, float range, float intensity, bool shadow);
-    void AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow);
-    bool drawDebugLights;
-
 private:
-    //Constructor helpers
+    //CONSTRUCTOR 
     void InitializeShaders();
+    void InitializePointLights();
+    void InitializeDirLight();
+    void SetupVertexBuffers();
+    void SetupFramebuffers();
+    void SetupSSAOData();
 
-    //Render
-    void RenderMainScene();
+    //RENDER PASSES
     void RenderShadowMaps();
     void RenderSSAO();
+    void RenderMainScene();
+    void DrawLightsDebug();
+    void DrawSkybox();
+    void BlurBrightScene();
+    void DrawFinalQuad();
 
-    //Shader objects
+    //SHADER OBJECTS
     Shader* lightingShader; 
     Shader* debugLightShader;
     Shader* screenShader;
@@ -81,30 +92,33 @@ private:
     Shader* ssaoShader;
     Shader* ssaoBlurShader;
 
-    //TEXTURES/MATERIAL
-    Material currentMaterial;
+    //COMMAND BUFFER
+    std::vector<DrawCall*> drawCalls;
 
+    //MATERIAL
+    Material currentMaterial;
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
+
+    //SKYBOX
     unsigned int currentSkyboxTexture;
     bool usingSkybox;
-    void DrawSkybox();
-    //fog
+
+    //FOG
     FogType fogType;
     glm::vec3 fogColor;
     float expFogDensity;
     float linearFogStart;
 
-    //MODEL
+    //MODELS & TERRAIN
     std::unordered_map<const char*, Model*> pathToModel; //path to model : model*   
+    std::unordered_map<const char*, std::pair<MeshData, unsigned int>> pathToTerrainMeshDataAndTextureID; //path : <Meshdata, texture>
 
-    //LIGHTING
+    //LIGHTING DATA
     float ambientLighting;
     float bloomThreshold;
-
     void SetAndSendAllLightsToFalse();
     //point
-    unsigned int currentFramePointLightCount;
     struct PointLight
     {
         glm::vec3 position;
@@ -121,9 +135,10 @@ private:
             : position(pos), color(col), range(range), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
+    unsigned int currentFramePointLightCount;
     void SendPointLightUniforms(Shader* shader, unsigned int index);
-    void InitializePointLights();
     float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
+
     //directional
     struct DirLight
     {
@@ -141,14 +156,8 @@ private:
     };
     DirLight dirLight;
     void SendDirLightUniforms();
-    void InitializeDirLight();
-    //debug
-    void DrawLightsDebug();
-
+    
     //SHADOWS
-    //directional
-    unsigned int D_SHADOW_WIDTH = 1024, D_SHADOW_HEIGHT = 1024;
-    //void RenderDirShadowMap();
     //cascade
     unsigned int CASCADE_SHADOW_WIDTH = 1024, CASCADE_SHADOW_HEIGHT = 1024;
     std::vector<float> cascadeLevels;
@@ -158,25 +167,20 @@ private:
     void RenderCascadedShadowMap();
     //point
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
-    void RenderPointShadowMap(unsigned int index);
     std::vector<glm::mat4> shadowTransforms;
+    void RenderPointShadowMap(unsigned int index);
+
+    //FRUSTUM CULLING
+    bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes);
+    void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes);
+    glm::vec4 cameraFrustumPlanes[6];
 
     //SSAO
     std::vector<glm::vec3> ssaoKernel;
     std::vector<glm::vec3> ssaoNoise;
     unsigned int ssaoNoiseTexture;
-    
-    //DRAWING
-    std::vector<DrawCall*> drawCalls;
-    void DrawFinalQuad();
-    void BlurBrightScene();
-    Vec4 clearColor;
-    glm::vec4 cameraFrustumPlanes[6]; //for frustum culling
-    bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes);
-    void GetFrustumPlanes(const glm::mat4& vp, glm::vec4* frustumPlanes);
 
-    //VERTEX BUFFER/ARRAY
-    void SetupVertexBuffers();
+    //MESH DATA
     MeshData triangleMeshData;
     MeshData cubeMeshData;
     MeshData sphereMeshData;
@@ -184,10 +188,8 @@ private:
     MeshData screenQuadMeshData;
     MeshData skyboxMeshData;
     unsigned int terrainVAO;
-    std::unordered_map<const char*, std::pair<MeshData, unsigned int>> pathToTerrainMeshDataAndTextureID; //path : <Meshdata, texture>
 
-    //FRAMEBUFFERS
-    void SetupFramebuffers();
+    //FRAMEBUFFERS/TEXTURES
     unsigned int hdrFBO, hdrMSAAFBO, hdrTextureRGBA, hdrMSAATextureRGBA;
     unsigned int twoPassBlurFBOs[2], twoPassBlurTexturesRGBA[2];
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
@@ -196,4 +198,8 @@ private:
     unsigned int pointShadowMapFBO, pointShadowMapTextureArrayDepth; 
     unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
     unsigned int ssaoFBO, ssaoBlurFBO, ssaoQuadTextureR, ssaoBlurTextureR;
+
+    //MISC DATA
+    Vec4 clearColor;
+    bool msaa;
 };

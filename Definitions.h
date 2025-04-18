@@ -66,8 +66,8 @@ struct Material
 
 constexpr float PI = 3.14159265359f;
 
-constexpr unsigned int SCREEN_WIDTH = 800;
-constexpr unsigned int SCREEN_HEIGHT = 600;
+constexpr unsigned int SCREEN_WIDTH = 1920;
+constexpr unsigned int SCREEN_HEIGHT = 1080;
 
 //max amount of point lights allowed
 constexpr unsigned int MAX_POINT_LIGHTS = 4;

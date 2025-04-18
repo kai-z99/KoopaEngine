@@ -66,7 +66,7 @@ public:
     Material GetMaterial()
     {
         Material m = Material();
-        m.baseColor = noTexturePink;
+        m.baseColor = {1,1,1};
         m.baseSpecular = 1.0f;
 
         for (const Texture& t : this->textures)
@@ -114,7 +114,7 @@ public:
         {
             if (this->vertices.size() <= MINIMUM_VERTEX_COUNT_FOR_LOD || triangleRatio >= 1.f)
             {
-                std::cout << "too little vertices or ratio > 1.\n";
+                //std::cout << "too little vertices or ratio > 1.\n";
                 return;
             }
             
@@ -124,7 +124,7 @@ public:
 
             const size_t targetIndexCount = std::max<size_t>(3, static_cast<size_t>(ic * triangleRatio) / 3 * 3);
 
-            std::cout << "Target index count: " << targetIndexCount;
+            //std::cout << "Target index count: " << targetIndexCount;
 
             std::vector<unsigned int> lodIndices(ic); //worst case size is og size
             /*
@@ -217,7 +217,7 @@ public:
             m.indexCount = static_cast<unsigned int>(lodIndices.size());
             m.aabb = this->aabb;
             
-            std::cout << "SUCCESS: old indexCount: " << ic << " New indexCount: " << m.indexCount << '\n';
+           // std::cout << "SUCCESS: old indexCount: " << ic << " New indexCount: " << m.indexCount << '\n';
 
             this->lodMeshData = m;
         }
