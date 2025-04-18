@@ -4,6 +4,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <meshoptimizer/meshoptimizer.h>
 
 #include "Shader.h"
 #include "Definitions.h"
@@ -11,6 +12,7 @@
 
 #include <string>
 #include <vector>
+#include <optional>
 using namespace std;
 
 #define MAX_BONE_INFLUENCE 4
@@ -46,10 +48,8 @@ public:
     vector<Texture>      textures;
     unsigned int VAO;
     AABB aabb;
+    std::optional<MeshData> lodMeshData;
 
-    bool hasDiffuseMap;
-    bool hasNormalMap;
-    bool hasSpecularMap;
     // constructor
     ModelMesh(vector<Vertex> vertices, vector<unsigned int> indices, vector<Texture> textures)
     {
@@ -59,10 +59,6 @@ public:
 
         this->calculateAABB();
             
-        this->hasDiffuseMap = false; // Initialize flags
-        this->hasNormalMap = false;
-        this->hasSpecularMap = false;
-
         // now that we have all the required data, set the vertex buffers and its attribute pointers.
         setupMesh();
     }
@@ -108,7 +104,129 @@ public:
         return m;
     }
 
+    void CreateLOD(float triangleRatio, float targetError, unsigned int options)
+    {
+        if (this->lodMeshData.has_value())
+        {
+            return;
+        }
+        else
+        {
+            if (this->vertices.size() <= MINIMUM_VERTEX_COUNT_FOR_LOD || triangleRatio >= 1.f)
+            {
+                std::cout << "too little vertices or ratio > 1.\n";
+                return;
+            }
+            
+            //SIMPLIFY INDEX BUFFER---------------------------------------------------------
+            const size_t ic = this->indices.size();
+            const size_t vc = this->vertices.size();
+
+            const size_t targetIndexCount = std::max<size_t>(3, static_cast<size_t>(ic * triangleRatio) / 3 * 3);
+
+            std::cout << "Target index count: " << targetIndexCount;
+
+            std::vector<unsigned int> lodIndices(ic); //worst case size is og size
+            /*
+            size_t written = meshopt_simplify( //return size of new indices
+                lodIndices.data(),
+                this->indices.data(),
+                ic,
+                &this->vertices[0].Position.x, //expects float* not Vertex* ()
+                vc,
+                sizeof(Vertex),
+                targetIndexCount,
+                targetError,
+                options,
+                nullptr
+                );
+            */
+
+            size_t written = meshopt_simplifySloppy( // Use the sloppy version
+                lodIndices.data(),
+                this->indices.data(),
+                ic,
+                &this->vertices[0].Position.x,
+                vc,
+                sizeof(Vertex),
+                targetIndexCount, // Target index count (error is ignored)
+                targetError, // This parameter is not used by sloppy version
+                nullptr // result error pointer (optional, maybe useful?)
+            );
+
+            lodIndices.resize(written);
+            lodIndices.shrink_to_fit();
+
+            //REMAP/SHIRNK VERTEX BUFFER---------------------------------------------------------
+            std::vector<unsigned int> remap(vc); //remap[oldVertexID] = newVertexID
+            size_t lodVertexCount = meshopt_generateVertexRemap(
+                remap.data(),
+                lodIndices.data(),
+                written,
+                this->vertices.data(), //Vertex is correct because we supply the stride
+                vc,
+                sizeof(Vertex)         
+            );
+
+            std::vector<Vertex> lodVertices(lodVertexCount); 
+            meshopt_remapVertexBuffer(lodVertices.data(), vertices.data(), vc,
+                sizeof(Vertex), remap.data());
+            meshopt_remapIndexBuffer(lodIndices.data(), lodIndices.data(), written,
+                remap.data());
+
+            //BUILD--------------------
+            unsigned int lodVAO, lodVBO, lodEBO;
+            glGenVertexArrays(1, &lodVAO);
+            glGenBuffers(1, &lodVBO);
+            glGenBuffers(1, &lodEBO);
+
+            glBindVertexArray(lodVAO);
+
+            glBindBuffer(GL_ARRAY_BUFFER, lodVBO);
+            glBufferData(GL_ARRAY_BUFFER, lodVertices.size() * sizeof(Vertex), lodVertices.data(), GL_STATIC_DRAW);
+
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lodEBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, lodIndices.size() * sizeof(unsigned int), lodIndices.data(), GL_STATIC_DRAW);
+            
+            glEnableVertexAttribArray(0); //pos
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+
+            glEnableVertexAttribArray(1); //norm
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+
+            glEnableVertexAttribArray(2); //tex
+            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+
+            glEnableVertexAttribArray(3); //tan
+            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
+
+            glEnableVertexAttribArray(4); //btan
+            glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
+
+            glEnableVertexAttribArray(5);
+            glVertexAttribIPointer(5, 4, GL_INT, sizeof(Vertex), (void*)offsetof(Vertex, m_BoneIDs));
+
+            glEnableVertexAttribArray(6);
+            glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, m_Weights));
+
+            glBindVertexArray(0);
+
+            //CREATE MESHDATA----------------
+            MeshData m = MeshData();
+            m.VAO = lodVAO;
+            m.indexCount = static_cast<unsigned int>(lodIndices.size());
+            m.aabb = this->aabb;
+            
+            std::cout << "SUCCESS: old indexCount: " << ic << " New indexCount: " << m.indexCount << '\n';
+
+            this->lodMeshData = m;
+        }
+    }
+
 private:
+    //cache
+    
+
     // render data 
     unsigned int VBO, EBO;
 

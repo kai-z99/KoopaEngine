@@ -70,6 +70,7 @@ private:
     Shader* lightingShader; 
     Shader* debugLightShader;
     Shader* screenShader;
+    Shader* brightShader; //takes in a hdr scene and extracts the bright parts.
     Shader* dirShadowShader;
     Shader* cascadeShadowShader;
     Shader* pointShadowShader;
@@ -187,7 +188,7 @@ private:
 
     //FRAMEBUFFERS
     void SetupFramebuffers();
-    unsigned int hdrFBO, hdrColorBuffers[2]; //0: hdrTextureRGBA 1: hdrTextureBrightRGBA
+    unsigned int hdrFBO, hdrMSAAFBO, hdrTextureRGBA, hdrMSAATextureRGBA;
     unsigned int twoPassBlurFBOs[2], twoPassBlurTexturesRGBA[2];
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;

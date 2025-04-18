@@ -31,7 +31,7 @@ KoopaEngine::KoopaEngine() {
     glfwSetFramebufferSizeCallback(window, KoopaEngine::framebuffer_size_callback_static);
     glfwSetCursorPosCallback(window, KoopaEngine::mouse_callback_static);
     glfwSetScrollCallback(window, KoopaEngine::scroll_callback_static);
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    //glfwWindowHint(GLFW_SAMPLES, 4);
 
     // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);

@@ -103,4 +103,7 @@ constexpr unsigned int BLUR_PASSES = 5;
 constexpr unsigned int SPHERE_X_SEGMENTS = 64;
 constexpr unsigned int SPHERE_Y_SEGMENTS = 64;
 
-//cascading shadowmap
+//LOD
+constexpr unsigned int MINIMUM_VERTEX_COUNT_FOR_LOD = 100;
+
+constexpr bool FRUSTUM_CULLING = true;

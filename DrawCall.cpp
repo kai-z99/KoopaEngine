@@ -9,6 +9,7 @@ DrawCall::DrawCall(MeshData meshData, Material material, const glm::mat4& model,
 
     //general data
     this->meshData = meshData;
+
     this->modelMatrix = model;
     this->primitive = primitive;
     
@@ -23,29 +24,15 @@ void DrawCall::Render(Shader* shader, bool tempDontCull)
 {
     shader->use();
 
+    //cull?
     if (usingCulling && !tempDontCull) glEnable(GL_CULL_FACE);
     else glDisable(GL_CULL_FACE);
 
+    //send model
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
 
+    //vind vao and draw
     glBindVertexArray(this->meshData.VAO);
-    /*
-    GLint boundEBO = 0;
-    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &boundEBO);
-
-    if (boundEBO != 0) //draw with glDrawElements
-    {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundEBO);
-
-        GLint bytesize = 0;
-        glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &bytesize);
-
-        unsigned int indicesSize = bytesize / sizeof(GLint);
-
-        glDrawElements(this->primitive, indicesSize, GL_UNSIGNED_INT, 0);
-    }
-    */
-
     if (this->meshData.indexCount != 0)
     {
         //we are drawing with an EBO
@@ -56,10 +43,44 @@ void DrawCall::Render(Shader* shader, bool tempDontCull)
         glDrawArrays(this->primitive, 0, this->meshData.vertexCount);
     }
     
-    
     glEnable(GL_CULL_FACE);
     glBindVertexArray(0);
-    
+}
+
+void DrawCall::RenderLOD(Shader* shader, bool tempDontCull)
+{
+    if (this->lodMeshData.has_value())
+    {
+        shader->use();
+
+        //cull?
+        if (usingCulling && !tempDontCull) glEnable(GL_CULL_FACE);
+        else glDisable(GL_CULL_FACE);
+
+        glUniformMatrix4fv(glGetUniformLocation(shader->ID, "model"), 1, GL_FALSE, glm::value_ptr(this->modelMatrix));
+
+        glBindVertexArray(this->lodMeshData->VAO);
+
+        if (this->lodMeshData->indexCount != 0)
+        {
+            //we are drawing with an EBO
+            glDrawElements(this->primitive, this->lodMeshData->indexCount, GL_UNSIGNED_INT, 0);
+        }
+        else
+        {
+            //usually this is not a possible case for LOD
+            glDrawArrays(this->primitive, 0, this->lodMeshData->vertexCount);
+        }
+
+
+        glEnable(GL_CULL_FACE);
+        glBindVertexArray(0);
+    }
+    else
+    {
+        //std::cout << "CANNOT RENDER LOD: NO LOD MESHDATA\n";
+        this->Render(shader, tempDontCull);
+    }
 }
 
 void DrawCall::BindMaterialUniforms(Shader* shader)
@@ -100,8 +121,7 @@ void DrawCall::BindMaterialUniforms(Shader* shader)
 
 void DrawCall::SetLODMesh(MeshData meshData)
 {
-
-
+    this->lodMeshData = std::move(meshData);
 }
 
 void DrawCall::SetCulling(bool enabled)
@@ -153,3 +173,20 @@ AABB DrawCall::GetWorldAABB() const
 
     return worldAABB;
 }
+
+/*
+GLint boundEBO = 0;
+glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &boundEBO);
+
+if (boundEBO != 0) //draw with glDrawElements
+{
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundEBO);
+
+    GLint bytesize = 0;
+    glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &bytesize);
+
+    unsigned int indicesSize = bytesize / sizeof(GLint);
+
+    glDrawElements(this->primitive, indicesSize, GL_UNSIGNED_INT, 0);
+}
+*/

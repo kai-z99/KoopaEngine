@@ -19,9 +19,10 @@ namespace VertexBufferSetup
 namespace FramebufferSetup
 {
     //Note: RBO is lost.
-    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int colorBuffers[2]); //HDR buffer
-    void SetupTwoPassBlurFramebuffers(unsigned int FBOs[2], unsigned int colorBuffers[2]);
-    void SetupHalfResBrightFramebuffer(unsigned int& FBO, unsigned int texture);
+    void SetupHDRFramebuffer(unsigned int& FBO, unsigned int& texture); //HDR buffer
+    void SetupMSAAHDRFramebuffer(unsigned int& FBO, unsigned int& texture); //HDR buffer, MSAA
+    void SetupHalfResBrightFramebuffer(unsigned int& FBO, unsigned int& texture); //only bright scene, half res
+    void SetupTwoPassBlurFramebuffers(unsigned int FBOs[2], unsigned int colorBuffers[2]); //hald res
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h);
     void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, int numCascades);
     void SetupPointShadowMapFramebuffer(unsigned int& FBO);

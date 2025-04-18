@@ -45,7 +45,6 @@ namespace ShaderSources
     const char* fs1 = R"(
     #version 420 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
-    layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHMENT_1
 
     struct PointLight {    
         vec3 position;   
@@ -107,7 +106,6 @@ namespace ShaderSources
     uniform int numPointLights;
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
-    uniform float bloomThreshold;
     //shadow
     uniform float cascadeDistances[3];              //set once in constructor
     uniform int cascadeCount;                       //set once in constructor
@@ -174,10 +172,12 @@ namespace ShaderSources
         }
 
         FragColor = vec4(color, 1.0f);
-            
+           
+        /*
         float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
         if (brightness > bloomThreshold) BrightColor = vec4(color, 1.0f);
         else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        */
     }
 
     const vec3 sampleOffsetDirections[20] = vec3[]
@@ -248,8 +248,8 @@ namespace ShaderSources
         closestDepth *= pointShadowProjFarPlane; //[0,1] -> [0, pointShadowProjFarPlane]
         
         float shadow = 0.0f;
-        float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
-
+        float bias = max(0.08 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
+                
         //PCF---
         int samples = 20;
         float viewDistance = length(viewPos - fragPos);
@@ -452,19 +452,19 @@ namespace ShaderSources
     const char* fsLight = R"(
     #version 420 core
     layout (location = 0) out vec4 FragColor; //COLOR_ATTACHEMNT0
-    layout (location = 1) out vec4 BrightColor; //COLOR_ATTACHEMNT1
         
     uniform vec3 lightColor;
     uniform float intensity;
-    uniform float bloomThreshold;
 
     void main()
     {
         FragColor = vec4(intensity * lightColor, 1.0); // a cube, that doesnt acutally emit light remember its purely a visual
             
+        /*
         float brightness = dot(FragColor.rgb, vec3(0.2126f, 0.7152f, 0.0722f)); //Luminance formula, based on human vision
         if (brightness > bloomThreshold) BrightColor = vec4(lightColor, 1.0f);
         else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        */
     }
     )";
 
@@ -538,6 +538,26 @@ namespace ShaderSources
         mapped = pow(mapped, vec3(1.0 / gamma)); //gamma correction
         FragColor = vec4(mapped, 1.0f);
     }
+    )";
+
+    const char* fsBright = R"(
+    #version 420 core
+    out vec4 FragColor;
+        
+    in vec2 TexCoords;
+        
+    uniform sampler2D hdrScene; //0
+    uniform float bloomThreshold;
+
+    void main()
+    {
+        vec3 scene = texture(hdrScene, TexCoords).rgb;
+        float luminance = dot(scene, vec3(0.2126, 0.7152, 0.0722));   
+        
+        vec3 result = luminance > bloomThreshold ? scene : vec3(0.0f);    
+        FragColor = vec4(result, 1.0f);
+    }
+ 
     )";
 
     const char* fsBlur = R"(

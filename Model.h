@@ -29,7 +29,6 @@ public:
     vector<Texture> textures_loaded;	// stores all the textures loaded so far, optimization to make sure textures aren't loaded more than once.
     vector<ModelMesh>    meshes;
     string directory;
-    AABB aabb;
     bool gammaCorrection;
 
     // constructor, expects a filepath to a 3D model.
@@ -72,7 +71,10 @@ private:
             // the node object only contains indices to index the actual objects in the scene. 
             // the scene contains all the data, node is just to keep stuff organized (like relations between nodes).
             aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-            meshes.push_back(processMesh(mesh, scene));
+            ModelMesh modelMesh = processMesh(mesh, scene);
+            modelMesh.CreateLOD(0.1f, 0.05f, 0);
+            meshes.push_back(modelMesh);
+                    
         }
         // after we've processed all of the meshes (if any) we then recursively process each of the children nodes
         for (unsigned int i = 0; i < node->mNumChildren; i++)

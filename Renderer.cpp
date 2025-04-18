@@ -25,6 +25,7 @@ Renderer::Renderer()
 {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_MULTISAMPLE);    
 
     //Static setup                                                 
     this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f };
@@ -135,6 +136,10 @@ void Renderer::InitializeShaders()
     glUniform1i(glGetUniformLocation(this->screenShader->ID, "blurBuffer"), 1); //GL_TEXTIRE1
     glUniform1f(glGetUniformLocation(this->screenShader->ID, "exposure"), DEFAULT_EXPOSURE); //set exposure
 
+    //extract bright parts from hdrScene
+    this->brightShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsBright);
+    glUniform1i(glGetUniformLocation(this->screenShader->ID, "hdrScene"), 0); //GL_TEXTIRE0
+
     //2 pass blur shader
     this->blurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsBlur);
     this->blurShader->use();
@@ -198,9 +203,10 @@ void Renderer::InitializeShaders()
 
 void Renderer::SetupFramebuffers()
 {
-    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrColorBuffers);
-    FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
+    FramebufferSetup::SetupHDRFramebuffer(this->hdrFBO, this->hdrTextureRGBA);
+    FramebufferSetup::SetupMSAAHDRFramebuffer(this->hdrMSAAFBO, this->hdrMSAATextureRGBA);
     FramebufferSetup::SetupHalfResBrightFramebuffer(this->halfResBrightFBO, this->halfResBrightTextureRGBA);
+    FramebufferSetup::SetupTwoPassBlurFramebuffers(this->twoPassBlurFBOs, this->twoPassBlurTexturesRGBA);
 
     FramebufferSetup::SetupDirShadowMapFramebuffer(this->dirShadowMapFBO, this->dirShadowMapTextureDepth,
         this->D_SHADOW_WIDTH, this->D_SHADOW_HEIGHT);
@@ -274,7 +280,7 @@ void Renderer::EndRenderFrame()
     //Render the ssao Texture
     this->RenderSSAO();
 
-    //Render the main scene into hdrFBO texture (2 targets: main, bright)
+    //Render the main scene into hdrMSAATexture, then blit that to hdrTexture
     this->RenderMainScene();
 
     //draw debug lights into hdrFBO is applicable
@@ -300,14 +306,10 @@ void Renderer::RenderMainScene()
 {
     //DRAW INTO FINAL IMAGE---
     //bind FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrMSAAFBO);
 
     //clear main scene with current color, clear bright scene with black always.
-    glClearBufferfv(GL_COLOR, 0, (float*)&this->clearColor);
-    GLfloat black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    glClearBufferfv(GL_COLOR, 1, black);
-
-    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
     //render
@@ -337,6 +339,16 @@ void Renderer::RenderMainScene()
         }
         glActiveTexture(GL_TEXTURE0);
     }
+
+    //blit msaa hdr texture to normal hdr texture
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, this->hdrMSAAFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->hdrFBO);
+    glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,   // src rect
+                      0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,   // dst rect
+                      GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+                      GL_NEAREST);                         // average samples
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::RenderShadowMaps()
@@ -414,8 +426,8 @@ void Renderer::DrawFinalQuad()
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
     glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
-    glActiveTexture(GL_TEXTURE0); //0: hdrBuffer in shader
-    glBindTexture(GL_TEXTURE_2D, this->hdrColorBuffers[0]); // 0:hdrTextureRGBA...HDRframebuffer texture to hdrBuffer in shader
+    glActiveTexture(GL_TEXTURE0); //0
+    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
     glActiveTexture(GL_TEXTURE1); //1: blurBuffer in shader
     glBindTexture(GL_TEXTURE_2D, this->twoPassBlurTexturesRGBA[1]);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -426,22 +438,31 @@ void Renderer::DrawFinalQuad()
 
 void Renderer::BlurBrightScene()
 {
-    //blit bright scene into half res texture
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, this->hdrFBO);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->halfResBrightFBO);
-    glReadBuffer(GL_COLOR_ATTACHMENT1); //bright-only scene
+    //EXTRACT BRIGHT BRIGHT SCENE INTO HALFRES------------------------------------------
+    //bind fb
+    glBindFramebuffer(GL_FRAMEBUFFER, this->halfResBrightFBO);
+    glViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST); //will be drawing directly in front screen
 
-    glBlitFramebuffer(
-        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,      // Source rectangle (full resolution)
-        0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,    // Destination rectangle (half resolution)
-        GL_COLOR_BUFFER_BIT,                    // Copy only the color buffer
-        GL_LINEAR                               // Linear filter for downsampling
-    );
+    this->brightShader->use();
+    
+    //Bind texture
+    glActiveTexture(GL_TEXTURE0);   //hdrScene
+    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
 
+    //draw quad
+    glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     
+    //NOW BLUR THAT BRIGHT SCENE---------------------------------------------------------
     blurShader->use();
-    unsigned int amount = BLUR_PASSES * 2; //* 2 since its a two pass blur
+
+    constexpr unsigned int amount = BLUR_PASSES * 2; //* 2 since its a two pass blur
     bool horizontal = true;
     bool first = true;
     for (unsigned int i = 0; i < amount; i++)
@@ -451,8 +472,8 @@ void Renderer::BlurBrightScene()
         glBindFramebuffer(GL_FRAMEBUFFER, this->twoPassBlurFBOs[horizontal]);
         glViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
         //Bind textures
-        glActiveTexture(GL_TEXTURE0);   //          BrightScene
-        glBindTexture(GL_TEXTURE_2D, first ? this->hdrColorBuffers[1] : this->twoPassBlurTexturesRGBA[!horizontal]);
+        glActiveTexture(GL_TEXTURE0);  
+        glBindTexture(GL_TEXTURE_2D, first ? this->halfResBrightTextureRGBA : this->twoPassBlurTexturesRGBA[!horizontal]);
         
         glBindVertexArray(this->screenQuadMeshData.VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -605,6 +626,8 @@ void Renderer::DrawSkybox()
 {
     if (this->usingSkybox)
     {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         this->skyShader->use();
         glDepthFunc(GL_LEQUAL);
 
@@ -616,7 +639,8 @@ void Renderer::DrawSkybox()
 
         //clean
         glBindVertexArray(0);
-        glDepthFunc(GL_LESS);;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDepthFunc(GL_LESS);
     }
 }
 
@@ -669,7 +693,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     }
 
     //             subtract the negative of the lightDir from the center, moving the vector along -lightDir. (by 1 unit)
-    glm::mat4 lightView = glm::lookAt(center - 0.1f * glm::normalize(this->dirLight.direction), center, worldUp);
+    glm::mat4 lightView = glm::lookAt(center - glm::normalize(this->dirLight.direction), center, worldUp);
     
     //Proj
     float minX = std::numeric_limits<float>::max();
@@ -690,7 +714,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     }
 
     //Pull in near plane, push out far plane
-    float zMult = 10.0f;
+    float zMult = 20.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
         
@@ -779,12 +803,12 @@ void Renderer::RenderCascadedShadowMap()
             AABB worldAABB = d->GetWorldAABB();
             this->GetFrustumPlanes(lightSpaceMatrices[i], frustumPlanes);
 
-            if (!this->IsAABBVisible(worldAABB, frustumPlanes))
+            if (!this->IsAABBVisible(worldAABB, frustumPlanes) && FRUSTUM_CULLING)
             {
                 continue;
             }
 
-            d->Render(this->cascadeShadowShader, true);
+            d->RenderLOD(this->cascadeShadowShader, false);
         }
         glCullFace(GL_BACK);
     }
@@ -844,20 +868,21 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         this->GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
         static int count = 0;
-        if (count % 60 == 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
+        if (count % 60 == 0 && count != 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
-        glCullFace(GL_FRONT);      // <<< CULL the _front_ faces
+        //glCullFace(GL_FRONT);      // <<< CULL the _front_ faces
         for (DrawCall* d : this->drawCalls)
         {
             AABB worldAABB = d->GetWorldAABB();
-            if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes))
+            if (!this->IsAABBVisible(worldAABB, shadowProjFrustumPlanes) && FRUSTUM_CULLING)
             {
                 count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
             
-            d->Render(this->pointShadowShader, true);
+            //d->Render(this->pointShadowShader, true);
+            d->RenderLOD(this->pointShadowShader, false);
         }
         glCullFace(GL_BACK);       // restore
     }
@@ -1020,7 +1045,10 @@ void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size
     //for every mesh in the model, create a drawcall
     for (ModelMesh& mesh : this->pathToModel[path]->meshes)
     {
-        this->drawCalls.push_back(new DrawCall(mesh.GetMeshData(), mesh.GetMaterial(), model));
+        DrawCall* drawCall = new DrawCall(mesh.GetMeshData(), mesh.GetMaterial(), model);
+        if (mesh.lodMeshData.has_value()) drawCall->SetLODMesh(*mesh.lodMeshData);
+
+        this->drawCalls.push_back(drawCall);
     }
 }
 
@@ -1042,6 +1070,9 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
 
 void Renderer::DrawLightsDebug()
 {
+    glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO);
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
     if (this->drawDebugLights)
     {
         this->debugLightShader->use();
@@ -1061,6 +1092,8 @@ void Renderer::DrawLightsDebug()
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
     }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow)
@@ -1223,7 +1256,6 @@ void Renderer::SendOtherUniforms()
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "linearFogStart"), this->linearFogStart);
     glUniform1f(glGetUniformLocation(this->lightingShader->ID, "sceneAmbient"), this->ambientLighting);
-    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "bloomThreshold"), this->bloomThreshold);
     
     this->terrainShader->use();
     glUniform3fv(glGetUniformLocation(this->terrainShader->ID, "fogColor"), 1, glm::value_ptr(this->fogColor));
@@ -1231,10 +1263,9 @@ void Renderer::SendOtherUniforms()
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "expFogDensity"), this->expFogDensity);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "linearFogStart"), this->linearFogStart);
     glUniform1f(glGetUniformLocation(this->terrainShader->ID, "sceneAmbient"), this->ambientLighting);
-    glUniform1f(glGetUniformLocation(this->lightingShader->ID, "bloomThreshold"), this->bloomThreshold);
 
-    this->debugLightShader->use();
-    glUniform1f(glGetUniformLocation(this->debugLightShader->ID, "bloomThreshold"), this->bloomThreshold);
+    this->brightShader->use();
+    glUniform1f(glGetUniformLocation(this->brightShader->ID, "bloomThreshold"), this->bloomThreshold);
 }
 
 /*

@@ -5,6 +5,8 @@
 #include "KoopaMath.h"
 #include "Definitions.h"
 
+#include <optional>
+
 class Shader;
 class Model;
 
@@ -15,6 +17,7 @@ public:
 
 	//Draw
 	void Render(Shader* shader, bool tempDontCull = false);
+	void RenderLOD(Shader* shader, bool tempDontCull = false);
 
 	//For "fs1" lighting shader
 	void BindMaterialUniforms(Shader* shader);
@@ -35,6 +38,8 @@ private:
 	MeshData meshData;
 	glm::mat4 modelMatrix;
 	GLenum primitive;
+
+	std::optional<MeshData> lodMeshData;
 
 	//Material
 	Material material;
