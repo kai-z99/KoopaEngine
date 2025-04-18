@@ -3,6 +3,7 @@
 #include <vector>
 #include <utility>
 #include "Definitions.h"
+#include <glm/glm.hpp>
 
 namespace VertexBufferSetup
 {
@@ -34,7 +35,7 @@ namespace FramebufferSetup
 namespace TextureSetup
 {
     void SetupPointShadowMapTextureArray(unsigned int& textureArray, unsigned int w, unsigned int h);
-    void SetupSSAONoiseTexture(unsigned int& texture);
+    void SetupSSAONoiseTexture(unsigned int& texture, const std::vector<glm::vec3>& noise);
     unsigned int LoadTexture(char const* path);
     unsigned int LoadTextureCubeMap(const std::vector<const char*>& faces);
 }

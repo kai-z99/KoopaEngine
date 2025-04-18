@@ -66,7 +66,7 @@ public:
     Material GetMaterial()
     {
         Material m = Material();
-        m.baseColor = {1,1,1};
+        m.baseColor = {0,1,0};
         m.baseSpecular = 1.0f;
 
         for (const Texture& t : this->textures)

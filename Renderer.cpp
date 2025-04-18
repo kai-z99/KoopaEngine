@@ -29,7 +29,7 @@ Renderer::Renderer()
 
     //initial setup   
     this->drawCalls = {};                                             
-    this->cascadeLevels = { DEFAULT_FAR / 50.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 5.0f };
+    this->cascadeLevels = { DEFAULT_FAR / 35.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 6.0f, DEFAULT_FAR / 2.0f };
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
     this->fogColor = glm::vec3(0.0f); //disabled
@@ -38,9 +38,14 @@ Renderer::Renderer()
     this->fogType = EXPONENTIAL_SQUARED;
     this->msaa = true;
     
-    //shaders
+    // shaders
     this->InitializeShaders();
 
+    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
+    this->SetupFramebuffers();
+    this->SetupVertexBuffers();
+
+   
     //LIGHTING-------------------------------------------------
     //Initialialize lighting
     this->bloomThreshold = 1.0f;
@@ -48,10 +53,6 @@ Renderer::Renderer()
     this->InitializePointLights();
     this->InitializeDirLight();
     this->currentFramePointLightCount = 0;
-
-    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
-    this->SetupFramebuffers();
-    this->SetupVertexBuffers();
 
     //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
     //here in the constructor.
@@ -167,7 +168,6 @@ void Renderer::InitializeShaders()
     //ssao blur
     this->ssaoBlurShader = new Shader(ShaderSources::vsSSAO, ShaderSources::fsSSAOBlur);
     glUniform1i(glGetUniformLocation(this->ssaoShader->ID, "ssaoTexture"), 0);            //GL_TEXTURE0
-
 }
 
 void Renderer::SetupFramebuffers()
@@ -193,7 +193,7 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupGBufferFramebuffer(this->gBufferFBO, this->gNormalTextureRGBA, this->gPositionTextureRGBA);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
-    TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture);
+    TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture, this->ssaoNoise);
 }
 
 void Renderer::SetupSSAOData()
@@ -230,7 +230,6 @@ void Renderer::SetupSSAOData()
 
         this->ssaoNoise.push_back(noise);
     }
-
 }
 
 void Renderer::SetupVertexBuffers()
@@ -725,7 +724,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
     //'#include "pch.h"'
 
     //Pull in near plane, push out far plane
-    float zMult = 10.0f;
+    float zMult = 5.0f;
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
         

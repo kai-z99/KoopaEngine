@@ -107,9 +107,9 @@ namespace ShaderSources
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
     //shadow
-    uniform float cascadeDistances[3];              //set once in constructor
+    uniform float cascadeDistances[4];              //set once in constructor
     uniform int cascadeCount;                       //set once in constructor
-    uniform mat4 cascadeLightSpaceMatrices[4];      //updated every frame in RenderCascadedShadowMap()
+    uniform mat4 cascadeLightSpaceMatrices[5];      //updated every frame in RenderCascadedShadowMap()
     uniform float pointShadowProjFarPlane;          //for point shadow calculation
     //camera
     uniform float farPlane;                         //updated every frame in SendCameraUniforms() (unnessesarily)
@@ -214,7 +214,7 @@ namespace ShaderSources
         if (fragDepth > 1.0f) return 0.0f;
             
         //BIAS (0.00035 is optimal NOTTT, no culling)
-        float bias = max(0.00025 * (1.0 - dot(normal, lightDir)), 0.000025); //more bias with more angle.
+        float bias = max(0.00085 * (1.0 - dot(normal, lightDir)), 0.000085); //more bias with more angle.
         //if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
         //else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
@@ -1054,8 +1054,8 @@ namespace ShaderSources
         vec3 fragPosView = texture(gPosition, TexCoords).xyz; 
         vec3 normalView = normalize(texture(gNormal, TexCoords).rgb);
         //random vector with z = 0
-        vec3 randomVec = normalize(texture(ssaoNoiseTexture, TexCoords * noiseScale).xyz);
-        
+        vec3 randomVec = normalize(texture(ssaoNoiseTexture, TexCoords * noiseScale).xyz);     
+
         vec3 tangent   = normalize(randomVec - normalView * dot(randomVec, normalView));
         vec3 bitangent = cross(normalView, tangent);
 
