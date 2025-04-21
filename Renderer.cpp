@@ -366,7 +366,7 @@ void Renderer::RenderMainScene()
 void Renderer::RenderShadowMaps()
 {
     //dir
-    if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
+    if (/*this->dirLight.castShadows*/ 1) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
     //point
     for (unsigned int i = 0; i < currentFramePointLightCount; i++)

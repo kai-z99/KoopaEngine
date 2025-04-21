@@ -129,6 +129,10 @@ namespace ShaderSources
     uniform bool usingNormalMap;
     uniform bool usingSpecularMap;
 
+    uniform bool useSSS = true;
+    uniform vec3 sssColor = vec3(0.5f, 1.0f, 0.5f);
+    uniform float sigmaT = 300.41f;
+
     vec3 ChooseDiffuse();
     vec3 ChooseNormal();
     vec3 ChooseSpecular();
@@ -314,6 +318,42 @@ namespace ShaderSources
         }
     } 
 
+    vec3 calculateDirSSS(DirLight light, vec3 fragPos)
+    {     
+        vec4 fragPosView = view * vec4(fragPos, 1.0f);
+        float depth = abs(fragPosView.z);
+            
+        int layer = -1;
+        for (int i = 0; i < cascadeCount; i++)
+        {
+            if (depth < cascadeDistances[i])
+            {
+                layer = i;
+                break;
+            }
+        }
+        if (layer == -1) layer = cascadeCount;
+    
+        vec4 lightSpacePos    = cascadeLightSpaceMatrices[layer] * vec4(fragPos, 1.0);
+        vec3 projectedPos    = lightSpacePos.xyz / lightSpacePos.w;
+        projectedPos = projectedPos * 0.5 + 0.5;      
+        
+        float nearCascade = (layer == 0)? nearPlane : cascadeDistances[layer - 1]; 
+        float farCascade = cascadeDistances[layer];                                
+       
+        float entryDepth = texture(cascadeShadowMaps, vec3(projectedPos.xy, layer)).r; 
+        float exitDepth = projectedPos.z; 
+
+        float thickness = max(exitDepth - entryDepth,0);
+
+        //return vec3(thickness,0,0);
+        float backlight = exp(-sigmaT * thickness); //beer-lambert
+
+        return vec3(backlight,0,0);
+
+        return light.intensity * light.color * backlight * sssColor;    
+    }
+
     vec3 CalcDirLight(DirLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular)
     {
         //return normal;
@@ -331,10 +371,17 @@ namespace ShaderSources
         float d = ((dot(direction, normal) + wrap) / (1 + wrap) );
 
         float diffWrap = max(d, 0.0f);
-        float scatterWidth = 0.3f;
+        float scatterWidth = 0.4f;
         vec3 scatterColor = vec3(1.0f, 0.0f, 0.0f);
         float scatter = smoothstep(0.0, scatterWidth, d) *
                   smoothstep(scatterWidth * 2.0, scatterWidth, d); 
+        
+
+        vec3 sss = vec3(0.0f);
+        if (useSSS && dot(direction, normal) < -0.1f)
+        {
+            sss = calculateDirSSS(light, fragPos);
+        }
             
         //spec
         vec3 halfwayDir = normalize(direction + viewDir);
@@ -342,10 +389,12 @@ namespace ShaderSources
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
 
         // combine results
-        vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        //vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor + (scatter * scatterColor);
+        //vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor + sss;
+        vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor/* + (scatter * sssColor) */+ sss;
         vec3 specular = light.intensity * light.color  * spec * baseSpecular;
         
+        //diffuse = sss;
+
         if (!light.castShadows)
         {
             return (diffuse + specular);
