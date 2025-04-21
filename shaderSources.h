@@ -130,8 +130,8 @@ namespace ShaderSources
     uniform bool usingSpecularMap;
 
     uniform bool useSSS = true;
-    uniform vec3 sssColor = vec3(0.42f, 0.02f, 0.02f);
-    uniform float sigmaT = 1000.0f;
+    uniform vec3 sssColor = vec3(0.02f, 0.42f, 0.02f);
+    uniform float sigmaT = 1500.0f;
 
     vec3 ChooseDiffuse();
     vec3 ChooseNormal();
@@ -344,7 +344,8 @@ namespace ShaderSources
         float entryDepth = texture(cascadeShadowMaps, vec3(projectedPos.xy, layer)).r; 
         float exitDepth = projectedPos.z; 
 
-        float thickness = abs(exitDepth - entryDepth - 0.1);
+        float thickness = max(exitDepth - entryDepth - 0.001, 0);
+        //thickness = abs(exitDepth - entryDepth - 0.005);
         //if (thickness < 0.0001) return vec3(0);
 
         //return vec3(thickness,0,0);
