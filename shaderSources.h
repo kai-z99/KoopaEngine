@@ -130,8 +130,8 @@ namespace ShaderSources
     uniform bool usingSpecularMap;
 
     uniform bool useSSS = true;
-    uniform vec3 sssColor = vec3(0.5f, 1.0f, 0.5f);
-    uniform float sigmaT = 300.41f;
+    uniform vec3 sssColor = vec3(0.42f, 0.02f, 0.02f);
+    uniform float sigmaT = 1000.0f;
 
     vec3 ChooseDiffuse();
     vec3 ChooseNormal();
@@ -344,14 +344,15 @@ namespace ShaderSources
         float entryDepth = texture(cascadeShadowMaps, vec3(projectedPos.xy, layer)).r; 
         float exitDepth = projectedPos.z; 
 
-        float thickness = max(exitDepth - entryDepth,0);
+        float thickness = abs(exitDepth - entryDepth - 0.1);
+        //if (thickness < 0.0001) return vec3(0);
 
         //return vec3(thickness,0,0);
         float backlight = exp(-sigmaT * thickness); //beer-lambert
 
-        return vec3(backlight,0,0);
+        //return vec3(backlight,0,0);
 
-        return light.intensity * light.color * backlight * sssColor;    
+        return /*light.intensity * light.color *  */     backlight * sssColor;    
     }
 
     vec3 CalcDirLight(DirLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular)
@@ -371,8 +372,8 @@ namespace ShaderSources
         float d = ((dot(direction, normal) + wrap) / (1 + wrap) );
 
         float diffWrap = max(d, 0.0f);
-        float scatterWidth = 0.4f;
-        vec3 scatterColor = vec3(1.0f, 0.0f, 0.0f);
+        float scatterWidth = 0.3f;
+       // vec3 scatterColor = vec3(1.0f, 0.0f, 0.0f);
         float scatter = smoothstep(0.0, scatterWidth, d) *
                   smoothstep(scatterWidth * 2.0, scatterWidth, d); 
         
@@ -390,7 +391,7 @@ namespace ShaderSources
 
         // combine results
         //vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor + sss;
-        vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor/* + (scatter * sssColor) */+ sss;
+        vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor + (scatter * sssColor) + sss;
         vec3 specular = light.intensity * light.color  * spec * baseSpecular;
         
         //diffuse = sss;
