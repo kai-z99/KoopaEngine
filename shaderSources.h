@@ -214,7 +214,7 @@ namespace ShaderSources
         if (fragDepth > 1.0f) return 0.0f;
             
         //BIAS (0.00035 is optimal NOTTT, no culling)
-        float bias = max(0.00085 * (1.0 - dot(normal, lightDir)), 0.000085); //more bias with more angle.
+        float bias = max(0.0012 * (1.0 - dot(normal, lightDir)), 0.00012); //more bias with more angle.
         //if (layer == cascadeCount) bias *= 1 / (farPlane * 0.5f);
         //else bias *= 1 / (cascadeDistances[layer] * 0.5f);
 
@@ -327,6 +327,15 @@ namespace ShaderSources
         //diffuse
         float diff = max(dot(direction, normal), 0.0f);
 
+        float wrap = 0.5f;
+        float d = ((dot(direction, normal) + wrap) / (1 + wrap) );
+
+        float diffWrap = max(d, 0.0f);
+        float scatterWidth = 0.3f;
+        vec3 scatterColor = vec3(1.0f, 0.0f, 0.0f);
+        float scatter = smoothstep(0.0, scatterWidth, d) *
+                  smoothstep(scatterWidth * 2.0, scatterWidth, d); 
+            
         //spec
         vec3 halfwayDir = normalize(direction + viewDir);
         float spec;
@@ -334,6 +343,7 @@ namespace ShaderSources
 
         // combine results
         vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
+        //vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor + (scatter * scatterColor);
         vec3 specular = light.intensity * light.color  * spec * baseSpecular;
         
         if (!light.castShadows)

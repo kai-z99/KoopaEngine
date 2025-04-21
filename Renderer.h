@@ -161,8 +161,9 @@ private:
     //cascade
     unsigned int CASCADE_SHADOW_WIDTH = 1024, CASCADE_SHADOW_HEIGHT = 1024;
     std::vector<float> cascadeLevels;
+    std::vector<float> cascadeMultipliers;
     std::vector<glm::vec4> GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view);
-    glm::mat4 CalculateLightSpaceCascadeMatrix(float near, float far);
+    glm::mat4 CalculateLightSpaceCascadeMatrix(float near, float far, int index);
     std::vector<glm::mat4> GetCascadeMatrices();
     void RenderCascadedShadowMap();
     //point

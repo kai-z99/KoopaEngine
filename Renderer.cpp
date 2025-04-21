@@ -25,11 +25,16 @@ Renderer::Renderer()
 {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    glEnable(GL_MULTISAMPLE);    
+    glEnable(GL_MULTISAMPLE); 
+    //glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     //initial setup   
     this->drawCalls = {};                                             
     this->cascadeLevels = { DEFAULT_FAR / 35.0f, DEFAULT_FAR / 15.0f, DEFAULT_FAR / 6.0f, DEFAULT_FAR / 2.0f };
+    this->cascadeMultipliers = {12.0f, 10.0f, 4.0f, 2.0f, 1.2f}; //minecraft{12.0f, 10.0f, 4.0f, 2.0f, 1.2f}
+    assert(cascadeLevels.size() == cascadeMultipliers.size() - 1);
+
     this->usingSkybox = false;
     this->clearColor = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
     this->fogColor = glm::vec3(0.0f); //disabled
@@ -673,7 +678,7 @@ std::vector<glm::vec4> Renderer::GetFrustumCornersWorldSpace(const glm::mat4& pr
     return corners;
 }
 
-glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
+glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far, int index)
 {
     glm::mat4 proj = glm::perspective(glm::radians(cam->zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, near, far);
     glm::mat4 view = cam->GetViewMatrix();
@@ -723,8 +728,8 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far)
 
     //'#include "pch.h"'
 
-    //Pull in near plane, push out far plane
-    float zMult = 5.0f;
+    //Pull in near plane, push out far plane because things can be outside view frustum but still cast shadows.
+    float zMult = this->cascadeMultipliers[index];
     minZ = (minZ < 0) ? minZ * zMult : minZ / zMult;
     maxZ = (maxZ < 0) ? maxZ / zMult : maxZ * zMult;
         
@@ -741,15 +746,15 @@ std::vector<glm::mat4> Renderer::GetCascadeMatrices()
     {
         if (i == 0)
         {
-            ret.push_back(CalculateLightSpaceCascadeMatrix(DEFAULT_NEAR, this->cascadeLevels[i]));
+            ret.push_back(CalculateLightSpaceCascadeMatrix(DEFAULT_NEAR, this->cascadeLevels[i], i));
         }
         else if (i < this->cascadeLevels.size())
         {
-            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], this->cascadeLevels[i]));
+            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], this->cascadeLevels[i], i));
         }
         else
         {
-            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], DEFAULT_FAR));
+            ret.push_back(CalculateLightSpaceCascadeMatrix(this->cascadeLevels[i - 1], DEFAULT_FAR, i));
         }
     }
 
