@@ -257,7 +257,7 @@ namespace ShaderSources
         }
 
         float variance = EdSq - (Ed * Ed);  //sigma squared
-        variance = max(variance, 0.0001f);
+        variance = max(variance, 0.00001f);
         float d = fragDepth - Ed;      
             
         float pMax = variance / (variance + (d * d));
@@ -604,13 +604,13 @@ namespace ShaderSources
         
     uniform sampler2D hdrScene; //0
     uniform float bloomThreshold;
-
+    
     void main()
     {
         vec3 scene = texture(hdrScene, TexCoords).rgb;
         float luminance = dot(scene, vec3(0.2126, 0.7152, 0.0722));   
         
-        vec3 result = luminance > bloomThreshold ? scene : vec3(0.0f);    
+        vec3 result = luminance > bloomThreshold ? scene : vec3(0);    
         FragColor = vec4(result, 1.0f);
     }
  
@@ -753,7 +753,7 @@ namespace ShaderSources
     uniform vec3 lightPos;
     uniform float pointShadowProjFarPlane;
 
-    out vec2 FragColor;
+    layout (location = 0) out vec2 FragColor;  
         
     void main()
     {
@@ -1180,54 +1180,60 @@ namespace ShaderSources
     const char* fsVSMPointBlur = R"(
     #version 420 core
 
-    layout (location = 0) out vec2 FragColor; //d, d^2
-        
-    in vec2 TexCoords;
+    layout (location = 0) out vec2 FragColor;     
+
+    in  vec2 TexCoords;
 
     uniform samplerCubeArray source;
-    uniform bool horizontal;
-    uniform int layer; //cubemaparray layer    
-    
+    uniform bool   horizontal;
+    uniform int    layer;          // cubemap-array layer
 
-    const float w[5] = float[5](0.227027,
-                            0.1945946,
-                            0.1216216,
-                            0.054054,
-                            0.016216);         
-    
+    uniform int   kernelRadius = 10;   
+    uniform float sigma        = 15.0;  
+
+    // Maps (u,v) in the current cube-face’s 2D domain to a 3-D direction.
     vec3 dirFromFaceAndTexCoords(vec2 uv, int face)
     {
-        uv = uv * 2.0 - 1.0; // [0,1] -> [-1,1]
-        if (face == 0) return normalize(vec3( 1.0,-uv.y,-uv.x));
-        if (face == 1) return normalize(vec3(-1.0,-uv.y, uv.x));
-        if (face == 2) return normalize(vec3( uv.x, 1.0, uv.y));
-        if (face == 3) return normalize(vec3( uv.x,-1.0,-uv.y));
-        if (face == 4) return normalize(vec3( uv.x,-uv.y, 1.0));
-                    return normalize(vec3(-uv.x,-uv.y,-1.0)); // face 5
-    }   
-    
+        uv = uv * 2.0 - 1.0;                    
+        if (face == 0) return normalize(vec3( 1.0, -uv.y, -uv.x));
+        if (face == 1) return normalize(vec3(-1.0, -uv.y,  uv.x));
+        if (face == 2) return normalize(vec3( uv.x,  1.0,  uv.y));
+        if (face == 3) return normalize(vec3( uv.x, -1.0, -uv.y));
+        if (face == 4) return normalize(vec3( uv.x, -uv.y,  1.0));
+                       return normalize(vec3(-uv.x, -uv.y, -1.0));   // face 5
+    }
+
+    float gaussian(int i)
+    {
+        float x = float(i);
+        return exp(-x * x / (2.0 * sigma * sigma));
+    }
+
     void main()
     {
-        int face = layer % 6;
-        int lightIndex = layer / 6;
-        vec2 texelSize = 1.0f / vec2(textureSize(source, 0));
-        
-        vec2 sum = vec2(0.0f, 0.0f);
+        int  face       = layer % 6;
+        int  lightIndex = layer / 6;
 
-        for (int i = -4; i <= 4; i++)
+        vec2 texelSize = 1.0 / vec2(textureSize(source, 0));
+
+        vec2  sum        = vec2(0.0);
+        float weightSum  = 0.0;
+
+        for (int i = -kernelRadius; i <= kernelRadius; ++i)
         {
-            vec2 offset = horizontal ? vec2(texelSize.x * i, 0) : vec2(0, texelSize.y * i);
-            vec3 direction = dirFromFaceAndTexCoords(TexCoords + offset, face);
-            
-            sum += w[abs(i)] * texture(source, vec4(direction, lightIndex)).rg;
+            float w = gaussian(i);              // weight for offset i
+            vec2 offset = horizontal ? vec2(texelSize.x * i, 0.0)
+                                     : vec2(0.0, texelSize.y * i);
+
+            vec3 dir = dirFromFaceAndTexCoords(TexCoords + offset, face);
+            vec2 sampleMoments = texture(source, vec4(dir, lightIndex)).rg;
+
+            sum       += w * sampleMoments;
+            weightSum += w;
         }
 
-        sum.y = max(sum.y, sum.x * sum.x + 1e-6);
-        
-        FragColor = sum;
-    }  
-
-
+        FragColor = sum / weightSum;
+    }
 
     )";
 }

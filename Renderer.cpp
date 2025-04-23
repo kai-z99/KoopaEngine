@@ -344,6 +344,11 @@ void Renderer::RenderMainScene()
         {
             this->lightingShader->use();
             d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
+
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);   // <- final blurred map
+            glUniform1i(glGetUniformLocation(lightingShader->ID, "pointShadowMapArray"), 3);
+
             d->Render(this->lightingShader);
         }
         else
@@ -902,21 +907,19 @@ void Renderer::RenderPointShadowMap(unsigned int index)
                 count++;
                 continue; //object is not in that side of the cubemap, dont bother with it.
             }
-            
+
             //d->Render(this->pointShadowShader, true);
             d->RenderLOD(this->pointShadowShader, true);
         }
         glCullFace(GL_BACK);       // restore
     }
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
-    // Generate the mipmaps! 
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
     
-
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     this->BlurPointShadowMap(index);
+
+    
 }
 
 void Renderer::BlurPointShadowMap(unsigned int index)
@@ -928,7 +931,7 @@ void Renderer::BlurPointShadowMap(unsigned int index)
     unsigned int read = this->pointShadowMapTextureArrayRG;
     unsigned int write = this->vsmBlurTextureArrayRG;
 
-    for (int pass = 0; pass < 4; pass++)
+    for (int pass = 0; pass < 2; pass++)
     {
         //set vsm shader horiz = true
         glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "horizontal"), pass % 2 == 0);
@@ -936,7 +939,6 @@ void Renderer::BlurPointShadowMap(unsigned int index)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, read);
         glBindFramebuffer(GL_FRAMEBUFFER, this->vsmBlurFBO);
-        glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
         for (int face = 0; face < 6; face++)
         {
@@ -953,20 +955,27 @@ void Renderer::BlurPointShadowMap(unsigned int index)
 
             glBindVertexArray(this->screenQuadMeshData.VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(0);
 
         }
-        glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+        //glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
         std::swap(read, write);
     }
 
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
+    //glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
     // Generate the mipmaps! 
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
+    //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
+
+    //glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->vsmBlurTextureArrayRG);
+    // Generate the mipmaps! 
+    //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
 
     glEnable(GL_DEPTH_TEST);
+
+    this->pointShadowMapTextureArrayRG = read;
 }
 
 void Renderer::ClearScreen(Vec4 col)

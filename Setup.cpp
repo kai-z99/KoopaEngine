@@ -704,12 +704,14 @@ namespace FramebufferSetup
         glGenTextures(1, &textureArray);
 
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+        /* no attachments yet – attached per-layer during blur passes */
+
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
 
         //set texture params
         glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
@@ -873,7 +875,7 @@ namespace TextureSetup
         glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
 
         //filtering
-        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         //sampling
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
