@@ -85,6 +85,7 @@ private:
     Shader* dirShadowShader;
     Shader* cascadeShadowShader;
     Shader* pointShadowShader;
+    Shader* vsmPointBlurShader;
     Shader* skyShader;
     Shader* blurShader;
     Shader* terrainShader;
@@ -170,6 +171,7 @@ private:
     unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
     std::vector<glm::mat4> shadowTransforms;
     void RenderPointShadowMap(unsigned int index);
+    void BlurPointShadowMap(unsigned int index);
 
     //FRUSTUM CULLING
     bool IsAABBVisible(const AABB& worldAABB, glm::vec4* frustumPlanes);
@@ -196,7 +198,8 @@ private:
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
-    unsigned int pointShadowMapFBO, pointShadowMapTextureArrayDepth; 
+    unsigned int pointShadowMapFBO, pointShadowMapTextureArrayRG; 
+    unsigned int vsmBlurFBO, vsmBlurTextureArrayRG;
     unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
     unsigned int ssaoFBO, ssaoBlurFBO, ssaoQuadTextureR, ssaoBlurTextureR;
 

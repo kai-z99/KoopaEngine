@@ -129,9 +129,9 @@ namespace ShaderSources
     uniform bool usingNormalMap;
     uniform bool usingSpecularMap;
 
-    uniform bool useSSS = true;
+    uniform bool useSSS = false;
     uniform vec3 sssColor = vec3(0.02f, 0.42f, 0.02f);
-    uniform float sigmaT = 1500.0f;
+    uniform float sigmaT = 1500.0f; //1500
 
     vec3 ChooseDiffuse();
     vec3 ChooseNormal();
@@ -233,7 +233,7 @@ namespace ShaderSources
             for(int y = -1; y <= 1; ++y)
             {
                 float pcfDepth = texture(cascadeShadowMaps, vec3(projCoords.xy + vec2(x, y) * texelSize, layer)).r;
-                shadow += fragDepth - bias > pcfDepth ? 1.0 : 0.0;  
+                shadow += fragDepth - bias > pcfDepth ? 0.0 : 1.0;  
             }    
         }
         shadow /= 9.0;
@@ -246,33 +246,25 @@ namespace ShaderSources
     float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, int index)
     {
         vec3 lightToFrag = fragPos - lightPos;
-
         float fragDepth = length(lightToFrag); // [0, pointShadowProjFarPlane]
-        float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag, index)).r;// [0,1]
-        closestDepth *= pointShadowProjFarPlane; //[0,1] -> [0, pointShadowProjFarPlane]
-        
-        float shadow = 0.0f;
-        float bias = max(0.08 * (1.0 - dot(normalize(normal), normalize(lightToFrag))), 0.005);  
-                
-        //PCF---
-        int samples = 20;
-        float viewDistance = length(viewPos - fragPos);
-        float diskRadius = (1.0 + (viewDistance / pointShadowProjFarPlane)) / 25.0; 
-    
-        for(int i = 0; i < samples; ++i)
-        {
-            float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag + sampleOffsetDirections[i] * diskRadius, index)).r;
-            closestDepth *= pointShadowProjFarPlane;   // move to [0, pointShadowProjFarPlane]
 
-            if (fragDepth - bias > closestDepth) shadow += 1.0;
-            
+        float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
+        float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
+        
+        if (fragDepth <= Ed) //definitaly lit
+        {
+            return 1.0f;
         }
 
-        shadow /= float(samples);  
+        float variance = EdSq - (Ed * Ed);  //sigma squared
+        variance = max(variance, 0.0001f);
+        float d = fragDepth - Ed;      
+            
+        float pMax = variance / (variance + (d * d));
 
-        //if (fragDepth - bias > closestDepth) shadow += 1.0f;
+        float shadow = pMax;
 
-        return shadow;
+        return clamp(shadow, 0.0f, 1.0f);
     }
 
     vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index)
@@ -314,7 +306,7 @@ namespace ShaderSources
         else
         {
             float shadow = PointShadowCalculation(fragPos, light.position, normal, index);
-            return (1.0f - shadow) * (diffuse + specular);
+            return shadow * (diffuse + specular);
         }
     } 
 
@@ -367,36 +359,39 @@ namespace ShaderSources
         vec3 direction = -normalize(light.direction);
 
         //diffuse
-        float diff = max(dot(direction, normal), 0.0f);
-
-        float wrap = 0.5f;
-        float d = ((dot(direction, normal) + wrap) / (1 + wrap) );
-
-        float diffWrap = max(d, 0.0f);
-        float scatterWidth = 0.3f;
-       // vec3 scatterColor = vec3(1.0f, 0.0f, 0.0f);
-        float scatter = smoothstep(0.0, scatterWidth, d) *
-                  smoothstep(scatterWidth * 2.0, scatterWidth, d); 
-        
-
-        vec3 sss = vec3(0.0f);
-        if (useSSS && dot(direction, normal) < -0.1f)
+        vec3 diffuse;
+        if (useSSS)
         {
-            sss = calculateDirSSS(light, fragPos);
-        }
+            vec3 sss = vec3(0.0f);
+            if (dot(direction, normal) < -0.1f)
+            {
+                sss = calculateDirSSS(light, fragPos);
+            }   
+
+            float wrap = 0.5f;
+            float d = ((dot(direction, normal) + wrap) / (1 + wrap) );
+
+            float diffWrap = max(d, 0.0f);
+            float scatterWidth = 0.3f;
+            float scatter = smoothstep(0.0, scatterWidth, d) *
+                      smoothstep(scatterWidth * 2.0, scatterWidth, d); 
+        
             
+            diffuse =  light.intensity * light.color  * diffWrap * diffuseColor + (scatter * sssColor) + sss;
+        }
+        else
+        {
+            float diff = max(dot(direction, normal), 0.0f);
+            diffuse  = light.intensity * light.color  * diff * diffuseColor;
+        }
+
         //spec
         vec3 halfwayDir = normalize(direction + viewDir);
         float spec;
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
+        vec3 specular = light.intensity * light.color  * spec * baseSpecular;
 
         // combine results
-        //vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor + sss;
-        vec3 diffuse  = light.intensity * light.color  * diffWrap * diffuseColor + (scatter * sssColor) + sss;
-        vec3 specular = light.intensity * light.color  * spec * baseSpecular;
-        
-        //diffuse = sss;
-
         if (!light.castShadows)
         {
             return (diffuse + specular);
@@ -405,7 +400,7 @@ namespace ShaderSources
         {
             //float shadow = DirShadowCalculation(FragPosDirLightSpace, normal, -direction);
             float shadow = CascadeShadowCalculation(FragPos, normal, -direction);
-            return (1.0 - shadow) * (diffuse + specular);
+            return shadow * (diffuse + specular);
         }
     }
 
@@ -627,26 +622,26 @@ namespace ShaderSources
         
     in vec2 TexCoords;
         
-    uniform sampler2D brightScene;
+    uniform sampler2D scene;
     uniform bool horizontal;
 
     float weights[5] = float[] (0.227027f, 0.1945946f, 0.1216216f, 0.054054f, 0.016216f); //gaussian
         
     void main()
     {
-        vec2 texOffset = 1.0f / textureSize(brightScene, 0); //size of one texel
+        vec2 texOffset = 1.0f / textureSize(scene, 0); //size of one texel
         vec3 result = vec3(0.0f);
             
         //Contribution of the current fragment
-        result += texture(brightScene, TexCoords).rgb * weights[0];
+        result += texture(scene, TexCoords).rgb * weights[0];
             
         if (horizontal)
         {
             for (int i = 1; i < 5; i++)
             {
                 vec2 currentSampleOffset = vec2(texOffset.x * i, 0.0f);
-                result += texture(brightScene, TexCoords + currentSampleOffset).rgb * weights[i];
-                result += texture(brightScene, TexCoords - currentSampleOffset).rgb * weights[i];
+                result += texture(scene, TexCoords + currentSampleOffset).rgb * weights[i];
+                result += texture(scene, TexCoords - currentSampleOffset).rgb * weights[i];
             }
         }
         else
@@ -654,8 +649,8 @@ namespace ShaderSources
             for (int i = 1; i < 5; i++)
             {
                 vec2 currentSampleOffset = vec2(0.0f, texOffset.y * i);
-                result += texture(brightScene, TexCoords + currentSampleOffset).rgb * weights[i];
-                result += texture(brightScene, TexCoords - currentSampleOffset).rgb * weights[i];
+                result += texture(scene, TexCoords + currentSampleOffset).rgb * weights[i];
+                result += texture(scene, TexCoords - currentSampleOffset).rgb * weights[i];
             }
         }
 
@@ -758,6 +753,8 @@ namespace ShaderSources
     uniform vec3 lightPos;
     uniform float pointShadowProjFarPlane;
 
+    out vec2 FragColor;
+        
     void main()
     {
         float lightDistance = length(FragPos.xyz - lightPos);
@@ -766,7 +763,7 @@ namespace ShaderSources
         lightDistance = lightDistance / pointShadowProjFarPlane;
     
         // write this as modified depth
-        gl_FragDepth = lightDistance;
+        FragColor = vec2(lightDistance, lightDistance * lightDistance); //r: d g: d^2
     }
     )";
 
@@ -1179,4 +1176,76 @@ namespace ShaderSources
         FragColor = result / (4.0f * 4.0f); //noise texture dimensions
     }
     )";
+
+    const char* fsVSMPointBlur = R"(
+    #version 420 core
+
+    layout (location = 0) out vec2 FragColor; //d, d^2
+        
+    in vec2 TexCoords;
+
+    uniform samplerCubeArray source;
+    uniform bool horizontal;
+    uniform int layer; //cubemaparray layer    
+    
+
+    const float w[5] = float[5](0.227027,
+                            0.1945946,
+                            0.1216216,
+                            0.054054,
+                            0.016216);         
+    
+    vec3 dirFromFaceAndTexCoords(vec2 uv, int face)
+    {
+        uv = uv * 2.0 - 1.0; // [0,1] -> [-1,1]
+        if (face == 0) return normalize(vec3( 1.0,-uv.y,-uv.x));
+        if (face == 1) return normalize(vec3(-1.0,-uv.y, uv.x));
+        if (face == 2) return normalize(vec3( uv.x, 1.0, uv.y));
+        if (face == 3) return normalize(vec3( uv.x,-1.0,-uv.y));
+        if (face == 4) return normalize(vec3( uv.x,-uv.y, 1.0));
+                    return normalize(vec3(-uv.x,-uv.y,-1.0)); // face 5
+    }   
+    
+    void main()
+    {
+        int face = layer % 6;
+        int lightIndex = layer / 6;
+        vec2 texelSize = 1.0f / vec2(textureSize(source, 0));
+        
+        vec2 sum = vec2(0.0f, 0.0f);
+
+        for (int i = -4; i <= 4; i++)
+        {
+            vec2 offset = horizontal ? vec2(texelSize.x * i, 0) : vec2(0, texelSize.y * i);
+            vec3 direction = dirFromFaceAndTexCoords(TexCoords + offset, face);
+            
+            sum += w[abs(i)] * texture(source, vec4(direction, lightIndex)).rg;
+        }
+
+        sum.y = max(sum.y, sum.x * sum.x + 1e-6);
+        
+        FragColor = sum;
+    }  
+
+
+
+    )";
 }
+
+//PCF---
+/*
+int samples = 20;
+float viewDistance = length(viewPos - fragPos);
+float diskRadius = (1.0 + (viewDistance / pointShadowProjFarPlane)) / 25.0;
+
+for(int i = 0; i < samples; ++i)
+{
+    float closestDepth = texture(pointShadowMapArray, vec4(lightToFrag + sampleOffsetDirections[i] * diskRadius, index)).r;
+    closestDepth *= pointShadowProjFarPlane;   // move to [0, pointShadowProjFarPlane]
+
+    if (fragDepth - bias > closestDepth) shadow += 1.0;
+
+}
+
+shadow /= float(samples);
+*/

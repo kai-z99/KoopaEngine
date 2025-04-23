@@ -24,9 +24,10 @@ namespace FramebufferSetup
     void SetupMSAAHDRFramebuffer(unsigned int& FBO, unsigned int& texture); //HDR buffer, MSAA
     void SetupHalfResBrightFramebuffer(unsigned int& FBO, unsigned int& texture); //only bright scene, half res
     void SetupTwoPassBlurFramebuffers(unsigned int FBOs[2], unsigned int colorBuffers[2]); //hald res
+    void SetupVSMTwoPassBlurFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h); //shadowmap res
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h);
     void SetupCascadedShadowMapFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h, int numCascades);
-    void SetupPointShadowMapFramebuffer(unsigned int& FBO);
+    void SetupPointShadowMapFramebuffer(unsigned int& FBO, unsigned int w, unsigned int h);
     void SetupGBufferFramebuffer(unsigned int& FBO, unsigned int& gNormal, unsigned int& gPosition);
     void SetupSSAOFramebuffer(unsigned int& FBO, unsigned int& texture);
 

@@ -697,6 +697,33 @@ namespace FramebufferSetup
         }
     }
 
+    void SetupVSMTwoPassBlurFramebuffer(unsigned int& FBO, unsigned int& textureArray, unsigned int w, unsigned int h)
+    {
+        //generate
+        glGenFramebuffers(1, &FBO);
+        glGenTextures(1, &textureArray);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+        glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
+
+        //set texture params
+        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    }
+
+    //If FRAGMENT is far enough away, use mip level > 0.
+    //If FRAGMENT is far enough away, use mip level > 0.
+    //If FRAGMENT is far enough away, use mip level > 0.
+    //If FRAGMENT is far enough away, use mip level > 0.
+    //If FRAGMENT is far enough away, use mip level > 0.
+    //If FRAGMENT is far enough away, use mip level > 0.
+
+
     void SetupDirShadowMapFramebuffer(unsigned int& FBO, unsigned int& texture, unsigned int w, unsigned int h)
     {
         //create framebuffer
@@ -758,17 +785,25 @@ namespace FramebufferSetup
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void SetupPointShadowMapFramebuffer(unsigned int& FBO)
+    void SetupPointShadowMapFramebuffer(unsigned int& FBO, unsigned int w, unsigned int h)
     {
         //create framebuffer
         glGenFramebuffers(1, &FBO);
 
         //Set buffers
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-        glDrawBuffer(GL_NONE); //No need for color buffer, just depth
-        glReadBuffer(GL_NONE); //No need for color buffer
+
+        unsigned int RBO;
+        glGenRenderbuffers(1, &RBO);
+        glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, RBO);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
         //Note: texture is not attched to FB yet. They will be attached when the faces are actaully rendered.
         //the reason why its not like this for the dir shadow is because its not cube so theres only one possible thing
@@ -835,14 +870,17 @@ namespace TextureSetup
         glGenTextures(1, &textureArray);
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
 
-        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_DEPTH_COMPONENT32, w, h, MAX_POINT_LIGHTS * 6, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
 
-        //  parameters
-        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        //filtering
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        //sampling
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+        glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     }
 
     void SetupSSAONoiseTexture(unsigned int& texture, const std::vector<glm::vec3>& noise)
