@@ -1187,26 +1187,76 @@ namespace ShaderSources
     uniform bool   horizontal;
     uniform int    layer;          // cubemap-array layer
 
-    uniform int   kernelRadius = 10;   
-    uniform float sigma        = 15.0;  
-
     // Maps (u,v) in the current cube-face’s 2D domain to a 3-D direction.
     vec3 dirFromFaceAndTexCoords(vec2 uv, int face)
     {
         uv = uv * 2.0 - 1.0;                    
-        if (face == 0) return normalize(vec3( 1.0, -uv.y, -uv.x));
-        if (face == 1) return normalize(vec3(-1.0, -uv.y,  uv.x));
-        if (face == 2) return normalize(vec3( uv.x,  1.0,  uv.y));
-        if (face == 3) return normalize(vec3( uv.x, -1.0, -uv.y));
-        if (face == 4) return normalize(vec3( uv.x, -uv.y,  1.0));
-                       return normalize(vec3(-uv.x, -uv.y, -1.0));   // face 5
+        if (face == 0) return vec3( 1.0, -uv.y, -uv.x);
+        if (face == 1) return vec3(-1.0, -uv.y,  uv.x);
+        if (face == 2) return vec3( uv.x,  1.0,  uv.y);
+        if (face == 3) return vec3( uv.x, -1.0, -uv.y);
+        if (face == 4) return vec3( uv.x, -uv.y,  1.0);
+                       return vec3(-uv.x, -uv.y, -1.0);   // face 5
     }
 
-    float gaussian(int i)
+    // ---- constant kernel parameters ---------------------------------
+    const int   R          = 5;               // kernel radius
+    const int   TAP_COUNT  = R * 2 + 1;        // == 11
+
+    // Normalised Gaussian weights for sigma = 3.0
+    const float weights[TAP_COUNT] = float[](
+    0.06634167, 0.07942539, 0.09136095, 0.10096946, 0.10721307,
+    0.10937892,                       // centre tap (i = 0)
+    0.10721307, 0.10096946, 0.09136095, 0.07942539, 0.06634167
+    );
+
+    // ---------------------------------------------
+    // 1.  Centre vectors  C_f   (major axis ±1)
+    // ---------------------------------------------
+    const vec3 kFaceCentre[6] = vec3[](
+        vec3( 1.0,  0.0,  0.0),   // +X   (face 0)
+        vec3(-1.0,  0.0,  0.0),   // -X   (face 1)
+        vec3( 0.0,  1.0,  0.0),   // +Y   (face 2)
+        vec3( 0.0, -1.0,  0.0),   // -Y   (face 3)
+        vec3( 0.0,  0.0,  1.0),   // +Z   (face 4)
+        vec3( 0.0,  0.0, -1.0)    // -Z   (face 5)
+    );
+
+    // ---------------------------------------------
+    // 2.  U-axis  (how local +u maps to world)
+    // ---------------------------------------------
+    const vec3 kFaceU[6] = vec3[](
+        vec3( 0.0,  0.0, -1.0),   // face 0   
+        vec3( 0.0,  0.0,  1.0),   // face 1  
+        vec3( 1.0,  0.0,  0.0),   // face 2  
+        vec3( 1.0,  0.0,  0.0),   // face 3  
+        vec3( 1.0,  0.0,  0.0),   // face 4  
+        vec3(-1.0,  0.0,  0.0)    // face 5
+    );
+
+    // ---------------------------------------------
+    // 3.  V-axis  (how local +v maps to world)
+    // ---------------------------------------------
+    const vec3 kFaceV[6] = vec3[](
+        vec3( 0.0, -1.0,  0.0),   // face 0  
+        vec3( 0.0, -1.0,  0.0),   // face 1  
+        vec3( 0.0,  0.0,  1.0),   // face 2  
+        vec3( 0.0,  0.0, -1.0),   // face 3  
+        vec3( 0.0, -1.0,  0.0),   // face 4  
+        vec3( 0.0, -1.0,  0.0)    // face 5  
+    );
+
+    // -------------------------------------------------
+    // Fast helper (no normalisation, no branching)
+    // -------------------------------------------------
+    vec3 dirFromFaceAndTexFast(vec2 uv, int face)
     {
-        float x = float(i);
-        return exp(-x * x / (2.0 * sigma * sigma));
+        float u = uv.x * 2.0 - 1.0;
+        float v = uv.y * 2.0 - 1.0;
+        return kFaceCentre[face] + u * kFaceU[face] + v * kFaceV[face];
     }
+
+
 
     void main()
     {
@@ -1218,13 +1268,13 @@ namespace ShaderSources
         vec2  sum        = vec2(0.0);
         float weightSum  = 0.0;
 
-        for (int i = -kernelRadius; i <= kernelRadius; ++i)
+        for (int i = -R; i <= R; ++i)
         {
-            float w = gaussian(i);              // weight for offset i
+            float w = weights[abs(i)];
             vec2 offset = horizontal ? vec2(texelSize.x * i, 0.0)
                                      : vec2(0.0, texelSize.y * i);
 
-            vec3 dir = dirFromFaceAndTexCoords(TexCoords + offset, face);
+            vec3 dir = dirFromFaceAndTexFast(TexCoords + offset, face);
             vec2 sampleMoments = texture(source, vec4(dir, lightIndex)).rg;
 
             sum       += w * sampleMoments;
