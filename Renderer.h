@@ -88,6 +88,7 @@ private:
     Shader* vsmPointBlurShader;
     Shader* skyShader;
     Shader* blurShader;
+    Shader* arrayBlurShader;
     Shader* terrainShader;
     Shader* geometryPassShader;
     Shader* ssaoShader;
@@ -168,7 +169,7 @@ private:
     std::vector<glm::mat4> GetCascadeMatrices();
     void RenderCascadedShadowMap();
     //point
-    unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
+    unsigned int P_SHADOW_WIDTH = 512, P_SHADOW_HEIGHT = 512;
     std::vector<glm::mat4> shadowTransforms;
     void RenderPointShadowMap(unsigned int index);
     void BlurPointShadowMap(unsigned int index);
@@ -198,12 +199,12 @@ private:
     unsigned int halfResBrightFBO, halfResBrightTextureRGBA;
     unsigned int dirShadowMapFBO, dirShadowMapTextureDepth;
     unsigned int cascadeShadowMapFBO, cascadeShadowMapTextureArrayDepth;
-    unsigned int pointShadowMapFBO, pointShadowMapTextureArrayRG; 
+    unsigned int pointShadowMapFBO, pointShadowMapTextureArrayStorageRG; 
+    unsigned int pointShadowMapTextureArrayBlurView, pointShadowMapTextureArrayCubeView;
     unsigned int vsmBlurFBO[2], vsmBlurTextureArrayRG[2];
     unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
     unsigned int ssaoFBO, ssaoBlurFBO, ssaoQuadTextureR, ssaoBlurTextureR;
     unsigned int T1;
-
 
     //MISC DATA
     Vec4 clearColor;

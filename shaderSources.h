@@ -251,7 +251,7 @@ namespace ShaderSources
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
         
-        float bias = 0.01f;
+        float bias = 0.00f;
         if (fragDepth - bias <= Ed) //definitaly lit
         {
             return 1.0f;
@@ -658,6 +658,52 @@ namespace ShaderSources
     }
  
     )";
+
+    const char* fsArrayBlur = R"(
+    #version 450 core
+    out vec2 FragColor;
+        
+    in vec2 TexCoords;
+        
+    uniform sampler2DArray scene;
+    uniform int layer;
+    uniform bool horizontal;
+
+    float weights[5] = float[] (0.227027f, 0.1945946f, 0.1216216f, 0.054054f, 0.016216f); //gaussian
+        
+    void main()
+    {
+        vec2 texOffset = 1.0f / textureSize(scene, 0).xy; //size of one texel
+        vec2 result = vec2(0.0f);
+            
+        //Contribution of the current fragment
+        result += texture(scene, vec3(TexCoords, layer)).rg * weights[0];
+            
+        if (horizontal)
+        {
+            for (int i = 1; i < 5; i++)
+            {
+                vec2 currentSampleOffset = vec2(texOffset.x * i, 0.0f);
+                result += texture(scene, vec3(TexCoords + currentSampleOffset, layer)).rg * weights[i];
+                result += texture(scene, vec3(TexCoords - currentSampleOffset, layer)).rg * weights[i];
+            }
+        }
+        else
+        {
+            for (int i = 1; i < 5; i++)
+            {
+                vec2 currentSampleOffset = vec2(0.0f, texOffset.y * i);
+                result += texture(scene, vec3(TexCoords + currentSampleOffset, layer)).rg * weights[i];
+                result += texture(scene, vec3(TexCoords - currentSampleOffset, layer)).rg * weights[i];
+            }
+        }
+
+        FragColor = result;
+    }
+ 
+    )";
+
+
 
     const char* vsDirShadow = R"(
     #version 450 core

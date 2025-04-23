@@ -63,7 +63,7 @@ Renderer::Renderer()
     //here in the constructor.
     //point
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayStorageRG);
     //cascade
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D_ARRAY, this->cascadeShadowMapTextureArrayDepth);
@@ -183,6 +183,10 @@ void Renderer::InitializeShaders()
     //vsm blur
     this->vsmPointBlurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsVSMPointBlur);
     glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "source"), 0);            //GL_TEXTURE0
+
+    //array blur for vsm
+    this->arrayBlurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsArrayBlur);
+    glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "source"), 0);            //GL_TEXTURE0
 }
 
 void Renderer::SetupFramebuffers()
@@ -204,13 +208,17 @@ void Renderer::SetupFramebuffers()
 
     //Point shadows
     FramebufferSetup::SetupPointShadowMapFramebuffer(this->pointShadowMapFBO, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
-    TextureSetup::SetupPointShadowMapTextureArray(this->pointShadowMapTextureArrayRG, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+    TextureSetup::SetupPointShadowMapTextureStorage(this->pointShadowMapTextureArrayStorageRG, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+    TextureSetup::SetupPointShadowMapTextureViews(this->pointShadowMapTextureArrayStorageRG, 
+        this->pointShadowMapTextureArrayBlurView, 
+        this->pointShadowMapTextureArrayCubeView);
 
     //SSAO
     FramebufferSetup::SetupGBufferFramebuffer(this->gBufferFBO, this->gNormalTextureRGBA, this->gPositionTextureRGBA);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
     TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture, this->ssaoNoise);
+    
 }
 
 void Renderer::SetupSSAOData()
@@ -340,7 +348,7 @@ void Renderer::RenderMainScene()
     //Note: binding vsmtexture is expcted in renderdoc (only horiz blur) but uses emoty in realtime (OG)
     //      binding pointshadowmaptexture is expected in renderdoc (2 tap blur) but uses OG texture in realtime.
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->T1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, T1);
     glActiveTexture(GL_TEXTURE0);
     //render
     for (DrawCall* d : this->drawCalls)
@@ -893,7 +901,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
         //set output texture (the thing being poured into) (render target)
         //set the face from the cube texture array
-        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, this->pointShadowMapTextureArrayRG, 0, index * 6 + i);
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, this->pointShadowMapTextureArrayStorageRG, 0, index * 6 + i);
         glUniformMatrix4fv(glGetUniformLocation(this->pointShadowShader->ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowTransforms[i]));
 
         //clear the currently bound attachment's depth buffer
@@ -925,61 +933,103 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    T1 = this->pointShadowMapTextureArrayRG;
-    //this->BlurPointShadowMap(index);
+    this->BlurPointShadowMap(index);
 }
 
 void Renderer::BlurPointShadowMap(unsigned int index)
 {
     glDisable(GL_DEPTH_TEST);
 
-    const GLuint ping[2] = { vsmBlurTextureArrayRG[0], vsmBlurTextureArrayRG[1] };
-    const GLuint fbo[2] = { vsmBlurFBO[0]         , vsmBlurFBO[1] };
+    glBindFramebuffer(GL_FRAMEBUFFER, this->pointShadowMapFBO);
+    this->arrayBlurShader->use();
+    glUniform1i(glGetUniformLocation(this->arrayBlurShader->ID, "horizontal"), true);
 
-    GLuint src = pointShadowMapTextureArrayRG;   // read raw moments first
-    int dstIdx = 0;
-
-    vsmPointBlurShader->use();
     glActiveTexture(GL_TEXTURE0);
-    glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, this->pointShadowMapTextureArrayBlurView);
 
-    for (int pass = 0; pass < 2; ++pass)
+    for (int pass = 0; pass < 2; pass++)
     {
         bool horizontal = (pass == 0);
-        glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "horizontal"), horizontal);
+        glUniform1i(glGetUniformLocation(arrayBlurShader->ID, "horizontal"), horizontal);
 
-        // write
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo[dstIdx]);
-
-        for (int face = 0; face < 6; ++face)
+        for (int i = 0; i < 6; i++)
         {
-            int layer = 6 * index + face;
-            glFramebufferTextureLayer(GL_FRAMEBUFFER,
-                GL_COLOR_ATTACHMENT0,
-                ping[dstIdx], 0, layer);
-            glDrawBuffer(GL_COLOR_ATTACHMENT0);
-            glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "layer"), layer);
+            unsigned int layerIndex = 6 * index + i;
+            glUniform1i(glGetUniformLocation(arrayBlurShader->ID, "layer"), layerIndex);
 
-            // read
-            glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, src);
+            glFramebufferTextureLayer(
+                GL_FRAMEBUFFER,
+                GL_COLOR_ATTACHMENT0,
+                pointShadowMapTextureArrayCubeView,  // cube-map array view (SAME AS BLURVIEW ARRAY)
+                0,                                    // mip level
+                layerIndex                           // layer
+            ); 
 
             glBindVertexArray(this->screenQuadMeshData.VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
+            glTextureBarrier();
+
         }
+        glTextureBarrier();
 
-        //glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT |
-        //    GL_FRAMEBUFFER_BARRIER_BIT);
-
-        src = ping[dstIdx];   // next pass samples what we just wrote
-        dstIdx ^= 1;              // swap buffers
     }
+    glTextureBarrier();
 
+    T1 = this->pointShadowMapTextureArrayCubeView;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, ping[dstIdx ^ 1]); // final result
-    T1 = ping[1];
-    //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
     glEnable(GL_DEPTH_TEST);
 }
+
+/*
+glDisable(GL_DEPTH_TEST);
+
+const GLuint ping[2] = { vsmBlurTextureArrayRG[0], vsmBlurTextureArrayRG[1] };
+const GLuint fbo[2] = { vsmBlurFBO[0]         , vsmBlurFBO[1] };
+
+GLuint src = pointShadowMapTextureArrayStorageRG;   // read raw moments first
+int dstIdx = 0;
+
+vsmPointBlurShader->use();
+glActiveTexture(GL_TEXTURE0);
+glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
+
+for (int pass = 0; pass < 2; ++pass)
+{
+    bool horizontal = (pass == 0);
+    glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "horizontal"), horizontal);
+
+    // write
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo[dstIdx]);
+
+    for (int face = 0; face < 6; ++face)
+    {
+        int layer = 6 * index + face;
+        glFramebufferTextureLayer(GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            ping[dstIdx], 0, layer);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "layer"), layer);
+
+        // read
+        glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, src);
+
+        glBindVertexArray(this->screenQuadMeshData.VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    //glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT |
+    //    GL_FRAMEBUFFER_BARRIER_BIT);
+
+    src = ping[dstIdx];   // next pass samples what we just wrote
+    dstIdx ^= 1;              // swap buffers
+}
+
+glBindFramebuffer(GL_FRAMEBUFFER, 0);
+glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, ping[dstIdx ^ 1]); // final result
+T1 = ping[1];
+//glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
+glEnable(GL_DEPTH_TEST);
+*/
 
 void Renderer::ClearScreen(Vec4 col)
 {

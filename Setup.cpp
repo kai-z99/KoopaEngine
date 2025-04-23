@@ -867,12 +867,10 @@ namespace FramebufferSetup
 
 namespace TextureSetup
 {
-    void SetupPointShadowMapTextureArray(unsigned int& textureArray, unsigned int w, unsigned int h)
+    void SetupPointShadowMapTextureStorage(unsigned int& textureArray, unsigned int w, unsigned int h)
     {
-        glGenTextures(1, &textureArray);
-        glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
-
-        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
+        glCreateTextures(GL_TEXTURE_CUBE_MAP_ARRAY, 1, &textureArray);
+        glTextureStorage3D(textureArray, 1, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6);
 
         //filtering
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -883,6 +881,26 @@ namespace TextureSetup
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
+    }
+
+    void SetupPointShadowMapTextureViews(unsigned int& textureArray, unsigned int& blurTex, unsigned int& cube)
+    {
+
+        glGenTextures(1, &blurTex);
+        glTextureView(blurTex,
+            GL_TEXTURE_2D_ARRAY,
+            textureArray,
+            GL_RG32F, 0, 1,
+            0, MAX_POINT_LIGHTS * 6
+        );
+
+        glGenTextures(1, &cube);
+        glTextureView(cube,
+            GL_TEXTURE_CUBE_MAP_ARRAY,
+            textureArray,
+            GL_RG32F, 0, 1,
+            0, MAX_POINT_LIGHTS * 6
+        );
     }
 
     void SetupSSAONoiseTexture(unsigned int& texture, const std::vector<glm::vec3>& noise)
