@@ -3,7 +3,7 @@
 namespace ShaderSources
 {
     const char* vs1 = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aNormal;
     layout (location = 2) in vec2 aTexCoords;
@@ -43,7 +43,7 @@ namespace ShaderSources
     )";
 
     const char* fs1 = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
 
     struct PointLight {    
@@ -251,7 +251,8 @@ namespace ShaderSources
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
         
-        if (fragDepth <= Ed) //definitaly lit
+        float bias = 0.01f;
+        if (fragDepth - bias <= Ed) //definitaly lit
         {
             return 1.0f;
         }
@@ -505,7 +506,7 @@ namespace ShaderSources
     )";
 
     const char* fsLight = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) out vec4 FragColor; //COLOR_ATTACHEMNT0
         
     uniform vec3 lightColor;
@@ -524,7 +525,7 @@ namespace ShaderSources
     )";
 
     const char* vsScreenQuad = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) in vec2 aPos;
     layout (location = 1) in vec2 aTexCoords;
 
@@ -538,7 +539,7 @@ namespace ShaderSources
     )";
 
     const char* fsScreenQuad = R"(
-    #version 420 core
+    #version 450 core
     out vec4 FragColor;
   
     in vec2 TexCoords;
@@ -596,7 +597,7 @@ namespace ShaderSources
     )";
 
     const char* fsBright = R"(
-    #version 420 core
+    #version 450 core
     out vec4 FragColor;
         
     in vec2 TexCoords;
@@ -616,7 +617,7 @@ namespace ShaderSources
     )";
 
     const char* fsBlur = R"(
-    #version 420 core
+    #version 450 core
     out vec4 FragColor;
         
     in vec2 TexCoords;
@@ -659,7 +660,7 @@ namespace ShaderSources
     )";
 
     const char* vsDirShadow = R"(
-    #version 420 core
+    #version 450 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -674,7 +675,7 @@ namespace ShaderSources
     )";
 
     const char* fsDirShadow = R"(
-    #version 420 core
+    #version 450 core
 
     void main()
     {
@@ -683,7 +684,7 @@ namespace ShaderSources
     )";
 
     const char* vsCascadedShadow = R"(
-    #version 420 core
+    #version 450 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -698,7 +699,7 @@ namespace ShaderSources
     )";
 
     const char* fsCascadedShadow = R"(
-    #version 420 core
+    #version 450 core
 
     void main()
     {
@@ -707,7 +708,7 @@ namespace ShaderSources
     )";
 
     const char* gsCascadedShadow = R"(
-    #version 420 core
+    #version 450 core
 
     layout(triangles, invocations = 5) in;
     layout(triangle_strip, max_vertices = 3) out;
@@ -728,7 +729,7 @@ namespace ShaderSources
     )";
 
     const char* vsPointShadow = R"(
-    #version 420 core
+    #version 450 core
 
     layout (location = 0) in vec3 aPos;
 
@@ -745,7 +746,7 @@ namespace ShaderSources
     )";
 
     const char* fsPointShadow = R"(
-    #version 420 core
+    #version 450 core
 
     in vec3 FragPos;
 
@@ -767,7 +768,7 @@ namespace ShaderSources
     )";
 
     const char* vsSkybox = R"(
-    #version 420 core
+    #version 450 core
     
     layout (location = 0) in vec3 aPos;
     
@@ -787,7 +788,7 @@ namespace ShaderSources
 
         
     const char* fsSkybox = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) out vec4 FragColor;
 
     in vec3 TexCoords;
@@ -801,7 +802,7 @@ namespace ShaderSources
     )";
 
     const char* vsTerrain = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoords;
 
@@ -816,7 +817,7 @@ namespace ShaderSources
 
     //tesselation control
     const char* tcsTerrain = R"(
-    #version 420 core
+    #version 450 core
     layout (vertices = 4) out;
 
     in vec2 TexCoords_VS_OUT[]; //since were working in patches
@@ -895,7 +896,7 @@ namespace ShaderSources
     
     //tesselation eval, for each tesselated vertex
     const char* tesTerrain = R"(
-    #version 420 core
+    #version 450 core
     layout (quads, fractional_odd_spacing, cw) in;
 
     uniform sampler2D heightMap;
@@ -1010,7 +1011,7 @@ namespace ShaderSources
     )";
 
     const char* fsTerrain = R"(
-    #version 420 core
+    #version 450 core
 
     in float Height;
     in vec3 Normal;
@@ -1026,7 +1027,7 @@ namespace ShaderSources
     )";
 
     const char* vsGeometryPass = R"(
-    #version 420 core
+    #version 450 core
 
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aNormal;
@@ -1053,7 +1054,7 @@ namespace ShaderSources
     )";
 
     const char* fsGeometryPass = R"(
-    #version 420 core
+    #version 450 core
     layout (location = 0) out vec4 gNormal;   //viewspace
     layout (location = 1) out vec4 gPosition; //viewspace    
 
@@ -1069,7 +1070,7 @@ namespace ShaderSources
     )";
 
     const char* vsSSAO = R"(
-    #version 420 core
+    #version 450 core
     
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoords;
@@ -1085,7 +1086,7 @@ namespace ShaderSources
     )";
 
     const char* fsSSAO = R"(
-    #version 420 core
+    #version 450 core
     
     in vec2 TexCoords;
 
@@ -1150,7 +1151,7 @@ namespace ShaderSources
 
 
     const char* fsSSAOBlur = R"(
-    #version 420 core
+    #version 450 core
     
     out float FragColor;
 
@@ -1177,7 +1178,7 @@ namespace ShaderSources
     )";
 
     const char* fsVSMPointBlur = R"(
-    #version 420 core
+    #version 450 core
 
     layout (location = 0) out vec2 FragColor;     
 

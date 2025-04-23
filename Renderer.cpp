@@ -72,6 +72,12 @@ Renderer::Renderer()
     glBindTexture(GL_TEXTURE_2D, this->ssaoBlurTextureR);
 
     glActiveTexture(GL_TEXTURE0);
+
+    int major = 0, minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    printf("OpenGL version: %d.%d\n", major, minor);
+    printf("%s\n", glGetString(GL_VERSION));
 }
 
 void Renderer::InitializeShaders()
@@ -919,8 +925,8 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    this->BlurPointShadowMap(index);
+    T1 = this->pointShadowMapTextureArrayRG;
+    //this->BlurPointShadowMap(index);
 }
 
 void Renderer::BlurPointShadowMap(unsigned int index)
