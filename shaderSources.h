@@ -79,14 +79,14 @@ namespace ShaderSources
         sampler2D specular; //may or may not exist. falls back to baseSpecular Texture 2
         float baseSpecular; //[0-1] hard scalar for specular
     };
-        
+
     //IN VARIABLES--------------------------------------------------------------------------------
     in vec2 TexCoords;
     in vec3 Normal;
     in vec3 FragPos;
     in mat3 TBN;
     in vec4 FragPosClipSpace;
-        
+
     //SAMPLERS------------------------------------------------------------------------------------
     //material.diffuse;                              //0
     //material.normal;                               //1
@@ -314,7 +314,6 @@ namespace ShaderSources
     {     
         vec4 fragPosView = view * vec4(fragPos, 1.0f);
         float depth = abs(fragPosView.z);
-            
         int layer = -1;
         for (int i = 0; i < cascadeCount; i++)
         {
@@ -893,7 +892,7 @@ namespace ShaderSources
         }
     }
     )";
-
+    
     //tesselation eval, for each tesselated vertex
     const char* tesTerrain = R"(
     #version 420 core

@@ -202,6 +202,8 @@ private:
     unsigned int vsmBlurFBO, vsmBlurTextureArrayRG;
     unsigned int gBufferFBO, gNormalTextureRGBA, gPositionTextureRGBA; 
     unsigned int ssaoFBO, ssaoBlurFBO, ssaoQuadTextureR, ssaoBlurTextureR;
+    unsigned int T1;
+
 
     //MISC DATA
     Vec4 clearColor;

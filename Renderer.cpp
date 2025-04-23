@@ -328,6 +328,13 @@ void Renderer::RenderMainScene()
     //clear main scene with current color, clear bright scene with black always.
     glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    
+
+    //Note: binding vsmtexture is expcted in renderdoc (only horiz blur) but uses emoty in realtime (OG)
+    //      binding pointshadowmaptexture is expected in renderdoc (2 tap blur) but uses OG texture in realtime.
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
+    glActiveTexture(GL_TEXTURE0);
 
     //render
     for (DrawCall* d : this->drawCalls)
@@ -344,10 +351,6 @@ void Renderer::RenderMainScene()
         {
             this->lightingShader->use();
             d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
-
-            glActiveTexture(GL_TEXTURE3);
-            glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);   // <- final blurred map
-            glUniform1i(glGetUniformLocation(lightingShader->ID, "pointShadowMapArray"), 3);
 
             d->Render(this->lightingShader);
         }
@@ -918,8 +921,6 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     this->BlurPointShadowMap(index);
-
-    
 }
 
 void Renderer::BlurPointShadowMap(unsigned int index)
@@ -943,7 +944,6 @@ void Renderer::BlurPointShadowMap(unsigned int index)
         for (int face = 0; face < 6; face++)
         {
             int layer = 6 * index + face;
-
             //attach correct face to vsm blur framebuffer
             glFramebufferTextureLayer(this->vsmBlurFBO, GL_COLOR_ATTACHMENT0, write, 0, layer);
 
@@ -951,15 +951,14 @@ void Renderer::BlurPointShadowMap(unsigned int index)
 
             glViewport(0, 0, this->P_SHADOW_WIDTH, this->P_SHADOW_HEIGHT);
 
-            //set cube array layer uniform in shadaer
-
             glBindVertexArray(this->screenQuadMeshData.VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             glBindVertexArray(0);
-
+                
         }
-        //glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+        glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT);
         std::swap(read, write);
+
     }
 
     //glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
