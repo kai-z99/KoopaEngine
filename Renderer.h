@@ -168,7 +168,7 @@ private:
     std::vector<glm::mat4> GetCascadeMatrices();
     void RenderCascadedShadowMap();
     //point
-    unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
+    unsigned int P_SHADOW_WIDTH = 512, P_SHADOW_HEIGHT = 512;
     std::vector<glm::mat4> shadowTransforms;
     void RenderPointShadowMap(unsigned int index);
     void BlurPointShadowMap(unsigned int index);

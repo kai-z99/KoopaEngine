@@ -251,7 +251,7 @@ namespace ShaderSources
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
         
-        float bias = 0.01f;
+        float bias = 0.00f;
         if (fragDepth - bias <= Ed) //definitaly lit
         {
             return 1.0f;
@@ -1257,8 +1257,6 @@ namespace ShaderSources
         return kFaceCentre[face] + u * kFaceU[face] + v * kFaceV[face];
     }
 
-
-
     void main()
     {
         int  face       = layer % 6;
@@ -1287,6 +1285,36 @@ namespace ShaderSources
 
     )";
 }
+
+
+/*
+    vec3 L = fragPos - lightPos;
+    float fragDepth = length(L); // [0, pointShadowProjFarPlane]
+
+    float viewDistance = length(viewPos - fragPos);
+    float diskRadius   = (1.0 + (viewDistance / pointShadowProjFarPlane)) / 25.0;
+
+    float shadow = 0.0;
+    const int samples = 20;
+
+    for (int i = 0; i < samples; ++i)
+    {
+        vec3 sampDir = normalize(L + sampleOffsetDirections[i] * diskRadius);
+
+        vec2 moments = texture(pointShadowMapArray, vec4(sampDir, float(index))).rg;
+        float   E_d    = moments.x * pointShadowProjFarPlane;
+        float   E_d2   = moments.y * pointShadowProjFarPlane * pointShadowProjFarPlane;
+
+        float variance = max(E_d2 - (E_d * E_d), 0.00001);
+        float d        = fragDepth - E_d;
+        float pMax     = variance / (variance + d * d);
+
+        if (fragDepth <= E_d) shadow += 1.0;
+        else shadow += pMax;
+    }
+    shadow = shadow / float(samples);
+    return clamp(shadow, 0.0, 1.0);
+*/
 
 //PCF---
 /*

@@ -340,7 +340,7 @@ void Renderer::RenderMainScene()
     //Note: binding vsmtexture is expcted in renderdoc (only horiz blur) but uses emoty in realtime (OG)
     //      binding pointshadowmaptexture is expected in renderdoc (2 tap blur) but uses OG texture in realtime.
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->T1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
     glActiveTexture(GL_TEXTURE0);
     //render
     for (DrawCall* d : this->drawCalls)
@@ -385,7 +385,7 @@ void Renderer::RenderMainScene()
 void Renderer::RenderShadowMaps()
 {
     //dir
-    if (/*this->dirLight.castShadows*/ 1) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
+    if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
     //point
     for (unsigned int i = 0; i < currentFramePointLightCount; i++)
@@ -926,7 +926,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     T1 = this->pointShadowMapTextureArrayRG;
-    //this->BlurPointShadowMap(index);
+    this->BlurPointShadowMap(index);
 }
 
 void Renderer::BlurPointShadowMap(unsigned int index)
@@ -954,14 +954,17 @@ void Renderer::BlurPointShadowMap(unsigned int index)
         for (int face = 0; face < 6; ++face)
         {
             int layer = 6 * index + face;
+
+            //based on layer and texture
             glFramebufferTextureLayer(GL_FRAMEBUFFER,
                 GL_COLOR_ATTACHMENT0,
                 ping[dstIdx], 0, layer);
+
             glDrawBuffer(GL_COLOR_ATTACHMENT0);
             glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "layer"), layer);
 
             // read
-            glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, src);
+            glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, src); //to texture0
 
             glBindVertexArray(this->screenQuadMeshData.VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -976,7 +979,7 @@ void Renderer::BlurPointShadowMap(unsigned int index)
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, ping[dstIdx ^ 1]); // final result
-    T1 = ping[1];
+    this->pointShadowMapTextureArrayRG = ping[1];
     //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
     glEnable(GL_DEPTH_TEST);
 }
