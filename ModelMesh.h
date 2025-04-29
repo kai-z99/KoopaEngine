@@ -69,6 +69,8 @@ public:
         m.baseColor = {0,0.25,0};
         m.baseSpecular = 0.3f;
 
+        
+
         for (const Texture& t : this->textures)
         {
             const std::string& type = t.type;
@@ -77,6 +79,9 @@ public:
             {
                 m.useDiffuseMap = true;
                 m.diffuse = t.id;
+                GLint bits;
+                glGetTextureLevelParameteriv(t.id, 0, GL_TEXTURE_ALPHA_SIZE, &bits);
+                m.hasAlpha = bits > 0;
             }
             else if (type == "texture_normal")
             {
@@ -89,6 +94,8 @@ public:
                 m.specular = t.id;
             }
         }
+
+        
 
         return m;
     }

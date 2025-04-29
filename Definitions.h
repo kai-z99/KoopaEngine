@@ -53,7 +53,8 @@ struct Material
     unsigned int diffuse;
     Vec3 baseColor;
     bool useDiffuseMap;
-
+    bool hasAlpha;
+    
     //id
     unsigned int normal;
     bool useNormalMap;

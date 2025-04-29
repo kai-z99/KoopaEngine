@@ -298,24 +298,26 @@ void Renderer::BeginRenderFrame()
 
 void Renderer::EndRenderFrame()
 {
+    glDisable(GL_BLEND);
+    
     //RENDER SHADOW MAPS---
     this->RenderShadowMaps();
 
     //Render the ssao Texture
     this->RenderSSAO();
 
+    glEnable(GL_BLEND);
     //Render the main scene into hdrMSAATexture, then blit that to hdrTexture
     this->RenderMainScene();
 
     //draw debug lights into hdrFBO is applicable
     this->DrawLightsDebug();
-
+    
     //Draw skybox last (using z = w optimization)
     this->DrawSkybox();
-    
+    glDisable(GL_BLEND);
     //DO BLOOM STUFF---
     this->BlurBrightScene();
-
     //DRAW QUAD ONTO SCREEN---
     //Draw the final scene on a full screen quad.
     this->DrawFinalQuad();
@@ -938,7 +940,8 @@ void Renderer::BlurPointShadowMap(unsigned int index)
 
     GLuint src = pointShadowMapTextureArrayRG;   // read raw moments first
     int dstIdx = 0;
-
+    //glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, pointShadowMapTextureArrayRG);
+    //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
     vsmPointBlurShader->use();
     glActiveTexture(GL_TEXTURE0);
     glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
@@ -980,6 +983,7 @@ void Renderer::BlurPointShadowMap(unsigned int index)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, ping[dstIdx ^ 1]); // final result
     this->pointShadowMapTextureArrayRG = ping[1];
+    //glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, pointShadowMapTextureArrayRG);
     //glGenerateMipmap(GL_TEXTURE_CUBE_MAP_ARRAY);
     glEnable(GL_DEPTH_TEST);
 }
@@ -1013,6 +1017,7 @@ void Renderer::ResetMaterial()
     this->currentMaterial.useDiffuseMap = false;
     this->currentMaterial.useNormalMap = false;
     this->currentMaterial.useSpecularMap = false;
+    this->currentMaterial.hasAlpha = false;
 }
 
 void Renderer::SetCurrentDiffuse(const char* path)
@@ -1020,6 +1025,10 @@ void Renderer::SetCurrentDiffuse(const char* path)
     AddToTextureMap(path);
     this->currentMaterial.diffuse = this->textureToID[path];
     this->currentMaterial.useDiffuseMap = true;
+                    
+    GLint bits;
+    glGetTextureLevelParameteriv(this->currentMaterial.diffuse, 0, GL_TEXTURE_ALPHA_SIZE, &bits);
+    this->currentMaterial.hasAlpha = bits > 0;
 }
 
 void Renderer::SetCurrentBaseColor(Vec3 col)

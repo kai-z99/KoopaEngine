@@ -429,7 +429,7 @@ namespace VertexBufferSetup
 
         return result;
     }
-
+    
     std::pair<MeshData, unsigned int> SetupTerrainBuffers(const char* path)
     {
         // load and create a texture
@@ -717,7 +717,7 @@ namespace FramebufferSetup
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
     }
-
+    
     //If FRAGMENT is far enough away, use mip level > 0.
     //If FRAGMENT is far enough away, use mip level > 0.
     //If FRAGMENT is far enough away, use mip level > 0.
@@ -983,8 +983,6 @@ namespace TextureSetup
         return textureID;
     }
 }
-
-
 
 /*
     void SetupPointShadowMapTexture(unsigned int& texture, unsigned int w, unsigned int h)

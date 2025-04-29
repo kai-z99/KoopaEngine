@@ -72,7 +72,7 @@ private:
             // the scene contains all the data, node is just to keep stuff organized (like relations between nodes).
             aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
             ModelMesh modelMesh = processMesh(mesh, scene);
-            modelMesh.CreateLOD(1.85f, 0.03f, 0);
+            modelMesh.CreateLOD(0.35f, 0.03f, 0);
             meshes.push_back(modelMesh);
                     
         }

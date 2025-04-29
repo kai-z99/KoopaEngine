@@ -125,6 +125,7 @@ namespace ShaderSources
     //UNIQUE UNIFORMS --------------------------------------------------------------------
     //material properties (Set by SendMaterialUniforms())
     uniform Material material;
+    uniform bool hasAlpha;
     uniform bool usingDiffuseMap;
     uniform bool usingNormalMap;
     uniform bool usingSpecularMap;
@@ -144,8 +145,8 @@ namespace ShaderSources
     void main()
     {
         vec3 color = vec3(0.0f);
-        vec3 viewDir = normalize(viewPos - FragPos);
-    
+        vec3 viewDir = normalize(viewPos - FragPos);    
+        
         //Find which textures to use
         vec3 diffuse = ChooseDiffuse();
         vec3 normal = ChooseNormal();
@@ -174,14 +175,9 @@ namespace ShaderSources
             float fogFactor = CalculateFogFactor();
             color = mix(fogColor, color, fogFactor);
         }
-
-        FragColor = vec4(color, 1.0f);
-           
-        /*
-        float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        if (brightness > bloomThreshold) BrightColor = vec4(color, 1.0f);
-        else BrightColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        */
+        
+        if (hasAlpha) FragColor = FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
+        else FragColor = vec4(color, 1.0f);
     }
 
     const vec3 sampleOffsetDirections[20] = vec3[]
@@ -243,6 +239,11 @@ namespace ShaderSources
         return shadow;  
     }
 
+    float LightBleedReduction(float p_max, float amount)
+    {
+        return smoothstep(amount, 1, p_max);
+    }
+
     float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, int index)
     {
         vec3 lightToFrag = fragPos - lightPos;
@@ -256,15 +257,14 @@ namespace ShaderSources
         {
             return 1.0f;
         }
-
+            
         float variance = EdSq - (Ed * Ed);  //sigma squared
         variance = max(variance, 0.00001f);
         float d = fragDepth - Ed;      
             
         float pMax = variance / (variance + (d * d));
 
-        float shadow = pMax;
-
+        float shadow = LightBleedReduction(pMax, 0.35f);
         return clamp(shadow, 0.0f, 1.0f);
     }
 
@@ -744,7 +744,7 @@ namespace ShaderSources
         FragPos = vec3(model * vec4(aPos, 1.0));
     }  
     )";
-
+    
     const char* fsPointShadow = R"(
     #version 450 core
 
@@ -786,7 +786,6 @@ namespace ShaderSources
     }  
     )";
 
-        
     const char* fsSkybox = R"(
     #version 450 core
     layout (location = 0) out vec4 FragColor;
@@ -1274,7 +1273,7 @@ namespace ShaderSources
                                      : vec2(0.0, texelSize.y * i);
 
             vec3 dir = dirFromFaceAndTexFast(TexCoords + offset, face);
-            vec2 sampleMoments = texture(source, vec4(dir, lightIndex)).rg;
+            vec2 sampleMoments = textureLod(source, vec4(dir, lightIndex), 0.0).rg;
 
             sum       += w * sampleMoments;
             weightSum += w;

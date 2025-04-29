@@ -96,6 +96,7 @@ void DrawCall::BindMaterialUniforms(Shader* shader)
     glUniform1i(glGetUniformLocation(shader->ID, "usingDiffuseMap"), this->material.useDiffuseMap);
     glUniform1i(glGetUniformLocation(shader->ID, "usingNormalMap"), this->material.useNormalMap);
     glUniform1i(glGetUniformLocation(shader->ID, "usingSpecularMap"), this->material.useSpecularMap);
+    glUniform1i(glGetUniformLocation(shader->ID, "hasAlpha"), this->material.hasAlpha);
 
     //TEXTURE0: DIFFUSEMAP------------------------------------------------------------------------
     if (this->material.useDiffuseMap)
