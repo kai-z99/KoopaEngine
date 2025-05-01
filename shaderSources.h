@@ -241,6 +241,8 @@ namespace ShaderSources
 
     float LightBleedReduction(float p_max, float amount)
     {
+        //if p_max < amount, p_max = 0 (so fully shadows random small lighted places below "amount")
+        //if p_max > 1, p_max = 1 (full light)
         return smoothstep(amount, 1, p_max);
     }
 
@@ -252,6 +254,7 @@ namespace ShaderSources
 
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
+        
         
         if (fragDepth <= Ed) //definitaly lit
         {
@@ -265,7 +268,7 @@ namespace ShaderSources
         float pMax = variance / (variance + (d * d));
 
         float shadow = LightBleedReduction(pMax, 0.25f);
-        return clamp(shadow, 0.0f, 1.0f);
+        return clamp(shadow, 0.0f, 1.0f); 
     }
 
     vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index)

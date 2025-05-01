@@ -20,7 +20,7 @@ public:
     unsigned int testTex;
     unsigned int testSSBO;
     Shader* SSBOTestShader;
-    int N = 1024 * 100000; //100,000,000
+    int N = 1024;// *100000; //100,000,000
     unsigned int testVAO;
 
     //Construction
