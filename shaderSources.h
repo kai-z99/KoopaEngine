@@ -1284,27 +1284,69 @@ namespace ShaderSources
 
     )";
 
-    const char* csColorTest = R"(
+    const char* csSSBOTest = R"(
     #version 450 core
     
-    layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+    layout(local_size_x = 1024) in;
 
-    layout(rgba32f, binding = 0) uniform image2D imgOutput;    
-    
+    layout(std430, binding = 0) buffer Positions
+    {
+        vec4 positions[];
+    };
+
     uniform float t;
     
+    //gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID; <- this is globalinvocationID
+
     void main()
     {
-        vec4 value = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+        uint index = gl_GlobalInvocationID.x;
         
-        value.r = mod(float(texelCoord.x) + t * 10, 512) / (gl_NumWorkGroups.x * gl_WorkGroupSize.x);
-        value.g = float(texelCoord.y)/(gl_NumWorkGroups.y * gl_WorkGroupSize.y);
-
-        imageStore(imgOutput, texelCoord, value);
+        /*
+        float phase = (t/60) + float(index) * 0.01f;
+        float radius = 0.5f + 0.5f * sin(phase);
+        positions[index].xy = normalize(positions[index].xy) * radius;
+        */
+        float u = float(gl_GlobalInvocationID.x) / float(gl_NumWorkGroups.x * gl_WorkGroupSize.x);
+        u = u * 2.0f - 1.0f; // [0,1] -> [-1,1]
+        
+        positions[index].x = u;
+        float ampScale = (cos(t/4) + 1) / 2;
+        positions[index].y = sin(u * 2.0f * 3.141f + (t/5)) * ampScale; 
     }
-
     )";
+
+    const char* vsSSBOTest = R"(
+    #version 450 core
+    /*
+    layout(std430, binding = 0) buffer Positions
+    {
+        vec4 positions[];
+    };    
+    */
+    layout (location = 0) in vec4 aPos;
+
+    void main()
+    {
+        // gl_VertexID ranges 0..N-1
+        //gl_Position = positions[gl_VertexID];
+        gl_Position = aPos;
+        gl_PointSize = 4.0f;
+    }
+    )";
+
+    const char* fsSSBOTest = R"(
+    #version 450 core
+    
+    out vec4 FragColor;
+
+    void main()
+    {
+        FragColor = vec4(1.0f, 0.8f, 0.2f, 1.0f);
+    }
+    )";
+
+
 }
 
 
@@ -1353,4 +1395,29 @@ for(int i = 0; i < samples; ++i)
 }
 
 shadow /= float(samples);
+*/
+
+//color test compute shader
+/*
+    const char* csColorTest = R"(
+    #version 450 core
+
+    layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+    layout(rgba32f, binding = 0) uniform image2D imgOutput;
+
+    uniform float t;
+
+    void main()
+    {
+        vec4 value = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+
+        value.r = mod(float(texelCoord.x) + t * 10, 512) / (gl_NumWorkGroups.x * gl_WorkGroupSize.x);
+        value.g = float(texelCoord.y)/(gl_NumWorkGroups.y * gl_WorkGroupSize.y);
+
+        imageStore(imgOutput, texelCoord, value);
+    }
+
+    )";
 */

@@ -29,6 +29,7 @@ Renderer::Renderer()
     glEnable(GL_MULTISAMPLE); 
     glDisable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_PROGRAM_POINT_SIZE);
 
     //initial setup   
     this->drawCalls = {};                                             
@@ -89,6 +90,38 @@ Renderer::Renderer()
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 512, 512, 0, GL_RGBA, GL_FLOAT, NULL);
 
     glBindImageTexture(0, testTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); //binding = 0
+
+    std::vector<glm::vec4> initPos(N);
+    for (size_t i = 0; i < N; i++)
+    {
+        float angle = (float)i / (float)N * 2.0f * PI; //2pi * [0,1]
+        initPos[i] = glm::vec4(cos(angle), sin(angle), 0.0f, 1.0f);
+    }
+
+    glGenBuffers(1, &testSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, testSSBO);
+
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(glm::vec4) * N, initPos.data(), GL_DYNAMIC_COPY);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); // binding = 0
+
+    glGenVertexArrays(1, &testVAO);
+    glBindVertexArray(testVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, testSSBO);
+    glVertexAttribPointer(
+        0,                // layout(location=0) in your VS
+        4,                // 4 floats per vertex (vec4)
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(glm::vec4),// stride
+        (void*)0          // offset
+    );
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); 
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
 }
 
 void Renderer::InitializeShaders()
@@ -195,7 +228,8 @@ void Renderer::InitializeShaders()
     this->vsmPointBlurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsVSMPointBlur);
     glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "source"), 0);            //GL_TEXTURE0
 
-    this->c = new ComputeShader(ShaderSources::csColorTest);
+    this->c = new ComputeShader(ShaderSources::csSSBOTest);
+    this->SSBOTestShader = new Shader(ShaderSources::vsSSBOTest, ShaderSources::fsSSBOTest);
 }
 
 void Renderer::SetupFramebuffers()
@@ -224,6 +258,7 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
     TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture, this->ssaoNoise);
+
 }
 
 void Renderer::SetupSSAOData()
@@ -329,14 +364,6 @@ void Renderer::EndRenderFrame()
     this->DrawSkybox();
 
     glDisable(GL_BLEND);
-
-    static float f = 0;
-    f++;
-    this->c->use();
-    glUniform1f(glGetUniformLocation(this->c->ID, "t"), f);
-
-    glDispatchCompute(512 / 8, 512 / 8, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
     //DO BLOOM STUFF---
     this->BlurBrightScene();
@@ -482,13 +509,28 @@ void Renderer::DrawFinalQuad()
 
     glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
     glActiveTexture(GL_TEXTURE0); //0
-    //glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
-    glBindTexture(GL_TEXTURE_2D, testTex);
+    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
     glActiveTexture(GL_TEXTURE1); //1: blurBuffer in shader
     glBindTexture(GL_TEXTURE_2D, this->twoPassBlurTexturesRGBA[1]);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
+    
+    //TESTING
+    static float f = 0;
+    f++;
+    this->c->use();
+    glUniform1f(glGetUniformLocation(this->c->ID, "t"), f);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
+    unsigned int numGroups = (N + 1023) / 1024; //256 local size
 
+    glDispatchCompute(numGroups, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBindVertexArray(testVAO);
+    this->SSBOTestShader->use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
+    //glDrawArrays(GL_POINTS, 0, N);
+    glBindVertexArray(0);
     glEnable(GL_DEPTH_TEST);
 }
 

@@ -1,16 +1,26 @@
-    #version 420 core
-    out vec4 FragColor;
-        
-    in vec2 TexCoords;
-        
-    uniform sampler2D hdrScene; //0
-    uniform float bloomThreshold;
+    #version 450 core
+    
+    layout(local_size_x = 256) in;
+
+    layout(std430, binding = 0) buffer Positions
+    {
+        vec4 positions[];
+    };
+
+    uniform float t;
+    
+    //gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID; <- this is globalinvocationID
 
     void main()
     {
-        vec3 scene = texture(hdrScene, TexCoords).rgb;
-        float luminance = dot(scene, vec3(0.2126, 0.7152, 0.0722));   
+        uint index = gl_GlobalInvocationID.x;
         
-        vec3 out = luminance > bloomThreshold ? scene : vec3(0.0f);    
-        FragColor = vec4(out, 1.0f);
+        /*
+        float phase = (t/60) + float(index) * 0.01f;
+        float radius = 0.5f + 0.5f * sin(phase);
+        positions[index].xy = normalize(positions[index].xy) * radius;
+        */
+
+        positions[index].x = (gl_GlobalInvocationID.x/(gl_NumWorkGroups.x * gl_WorkGroupSize.x));
+        positions[index].y = sin((gl_GlobalInvocationID.x/(gl_NumWorkGroups.x * gl_WorkGroupSize.x)) * t); 
     }

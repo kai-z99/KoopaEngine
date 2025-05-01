@@ -18,6 +18,10 @@ public:
     //TEMP
     Camera* cam;
     unsigned int testTex;
+    unsigned int testSSBO;
+    Shader* SSBOTestShader;
+    int N = 1024 * 10000;
+    unsigned int testVAO;
 
     //Construction
 	Renderer();
