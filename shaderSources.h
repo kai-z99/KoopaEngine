@@ -246,14 +246,14 @@ namespace ShaderSources
 
     float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, int index)
     {
+        float bias = 0.05f;
         vec3 lightToFrag = fragPos - lightPos;
-        float fragDepth = length(lightToFrag); // [0, pointShadowProjFarPlane]
+        float fragDepth = length(lightToFrag) - bias; // [0, pointShadowProjFarPlane]
 
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
         
-        float bias = 0.00f;
-        if (fragDepth - bias <= Ed) //definitaly lit
+        if (fragDepth <= Ed) //definitaly lit
         {
             return 1.0f;
         }
@@ -264,7 +264,7 @@ namespace ShaderSources
             
         float pMax = variance / (variance + (d * d));
 
-        float shadow = LightBleedReduction(pMax, 0.35f);
+        float shadow = LightBleedReduction(pMax, 0.25f);
         return clamp(shadow, 0.0f, 1.0f);
     }
 
@@ -1307,6 +1307,7 @@ namespace ShaderSources
         float radius = 0.5f + 0.5f * sin(phase);
         positions[index].xy = normalize(positions[index].xy) * radius;
         */
+
         float u = float(gl_GlobalInvocationID.x) / float(gl_NumWorkGroups.x * gl_WorkGroupSize.x);
         u = u * 2.0f - 1.0f; // [0,1] -> [-1,1]
         

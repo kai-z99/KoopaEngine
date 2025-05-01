@@ -525,7 +525,7 @@ void Renderer::DrawFinalQuad()
 
     glDispatchCompute(numGroups, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(testVAO);
     this->SSBOTestShader->use();
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
@@ -971,7 +971,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
         this->GetFrustumPlanes(shadowTransforms[i], shadowProjFrustumPlanes);
 
         static int count = 0;
-        if (count % 60 == 0 && count != 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
+        //if (count % 60 == 0 && count != 0) std::cout << "Draw calls culled in point shadow mapping: " << count << '\n';
 
         //render
         //glCullFace(GL_FRONT);      // <<< CULL the _front_ faces
