@@ -149,6 +149,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ComputeShader.h" />
     <ClInclude Include="Definitions.h" />
     <ClInclude Include="ModelMesh.h" />
     <ClInclude Include="Model.h" />

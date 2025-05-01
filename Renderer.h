@@ -7,6 +7,7 @@
 #include <utility>
 
 class Shader;
+class ComputeShader;
 class DrawCall;
 class Camera;
 class Model;
@@ -16,6 +17,7 @@ class Renderer
 public:
     //TEMP
     Camera* cam;
+    unsigned int testTex;
 
     //Construction
 	Renderer();
@@ -92,6 +94,7 @@ private:
     Shader* geometryPassShader;
     Shader* ssaoShader;
     Shader* ssaoBlurShader;
+    ComputeShader* c;
 
     //COMMAND BUFFER
     std::vector<DrawCall*> drawCalls;

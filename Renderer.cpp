@@ -7,6 +7,7 @@
 
 #include "shaderSources.h"
 #include "Shader.h"
+#include "ComputeShader.h"
 #include "DrawCall.h"
 #include "Setup.h"
 #include "Camera.h"
@@ -26,7 +27,7 @@ Renderer::Renderer()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE); 
-    //glEnable(GL_BLEND);
+    glDisable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     //initial setup   
@@ -78,6 +79,16 @@ Renderer::Renderer()
     glGetIntegerv(GL_MINOR_VERSION, &minor);
     printf("OpenGL version: %d.%d\n", major, minor);
     printf("%s\n", glGetString(GL_VERSION));
+
+    glGenTextures(1, &testTex);
+    glBindTexture(GL_TEXTURE_2D, testTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 512, 512, 0, GL_RGBA, GL_FLOAT, NULL);
+
+    glBindImageTexture(0, testTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); //binding = 0
 }
 
 void Renderer::InitializeShaders()
@@ -183,6 +194,8 @@ void Renderer::InitializeShaders()
     //vsm blur
     this->vsmPointBlurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsVSMPointBlur);
     glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "source"), 0);            //GL_TEXTURE0
+
+    this->c = new ComputeShader(ShaderSources::csColorTest);
 }
 
 void Renderer::SetupFramebuffers()
@@ -298,8 +311,6 @@ void Renderer::BeginRenderFrame()
 
 void Renderer::EndRenderFrame()
 {
-    glDisable(GL_BLEND);
-    
     //RENDER SHADOW MAPS---
     this->RenderShadowMaps();
 
@@ -307,6 +318,7 @@ void Renderer::EndRenderFrame()
     this->RenderSSAO();
 
     glEnable(GL_BLEND);
+
     //Render the main scene into hdrMSAATexture, then blit that to hdrTexture
     this->RenderMainScene();
 
@@ -315,7 +327,17 @@ void Renderer::EndRenderFrame()
     
     //Draw skybox last (using z = w optimization)
     this->DrawSkybox();
+
     glDisable(GL_BLEND);
+
+    static float f = 0;
+    f++;
+    this->c->use();
+    glUniform1f(glGetUniformLocation(this->c->ID, "t"), f);
+
+    glDispatchCompute(512 / 8, 512 / 8, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
     //DO BLOOM STUFF---
     this->BlurBrightScene();
     //DRAW QUAD ONTO SCREEN---
@@ -460,7 +482,8 @@ void Renderer::DrawFinalQuad()
 
     glBindVertexArray(this->screenQuadMeshData.VAO); //whole screen
     glActiveTexture(GL_TEXTURE0); //0
-    glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
+    //glBindTexture(GL_TEXTURE_2D, this->hdrTextureRGBA);
+    glBindTexture(GL_TEXTURE_2D, testTex);
     glActiveTexture(GL_TEXTURE1); //1: blurBuffer in shader
     glBindTexture(GL_TEXTURE_2D, this->twoPassBlurTexturesRGBA[1]);
     glDrawArrays(GL_TRIANGLES, 0, 6);

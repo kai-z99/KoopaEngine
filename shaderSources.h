@@ -1283,6 +1283,28 @@ namespace ShaderSources
     }
 
     )";
+
+    const char* csColorTest = R"(
+    #version 450 core
+    
+    layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+    layout(rgba32f, binding = 0) uniform image2D imgOutput;    
+    
+    uniform float t;
+    
+    void main()
+    {
+        vec4 value = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+        
+        value.r = mod(float(texelCoord.x) + t * 10, 512) / (gl_NumWorkGroups.x * gl_WorkGroupSize.x);
+        value.g = float(texelCoord.y)/(gl_NumWorkGroups.y * gl_WorkGroupSize.y);
+
+        imageStore(imgOutput, texelCoord, value);
+    }
+
+    )";
 }
 
 

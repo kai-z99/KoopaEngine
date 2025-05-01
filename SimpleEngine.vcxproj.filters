@@ -60,6 +60,9 @@
     <ClInclude Include="Model.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="ComputeShader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SimpleEngine.cpp">
