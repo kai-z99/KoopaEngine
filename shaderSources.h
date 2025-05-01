@@ -248,9 +248,8 @@ namespace ShaderSources
 
     float PointShadowCalculation(vec3 fragPos, vec3 lightPos, vec3 normal, int index)
     {
-        float bias = 0.05f;
         vec3 lightToFrag = fragPos - lightPos;
-        float fragDepth = length(lightToFrag) - bias; // [0, pointShadowProjFarPlane]
+        float fragDepth = length(lightToFrag); // [0, pointShadowProjFarPlane]
 
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
@@ -766,7 +765,15 @@ namespace ShaderSources
         lightDistance = lightDistance / pointShadowProjFarPlane;
     
         // write this as modified depth
-        FragColor = vec2(lightDistance, lightDistance * lightDistance); //r: d g: d^2
+        
+        float dx = dFdx(lightDistance);
+        float dy = dFdx(lightDistance);
+        
+        //Remember: each pixel's depth is not constant if on a slope (especially low res shadowmaps)
+        // this formula increases the variance based on the slope of the surface.
+        // aka: adds the intra-pixel variance caused by the surface slope.
+        float momentY = lightDistance * lightDistance + clamp(0.25f * (dx * dx + dy * dy), 0.0f, 0.0001f);
+        FragColor = vec2(lightDistance, momentY); //r: d g: d^2
     }
     )";
 
