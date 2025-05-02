@@ -103,7 +103,7 @@ Renderer::Renderer()
 
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(glm::vec4) * N, initPos.data(), GL_DYNAMIC_COPY);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); // binding = 0
-
+                            
     glGenVertexArrays(1, &testVAO);
     glBindVertexArray(testVAO);
     glBindBuffer(GL_ARRAY_BUFFER, testSSBO);
@@ -120,8 +120,6 @@ Renderer::Renderer()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
 }
 
 void Renderer::InitializeShaders()
@@ -230,6 +228,8 @@ void Renderer::InitializeShaders()
 
     this->c = new ComputeShader(ShaderSources::csSSBOTest);
     this->SSBOTestShader = new Shader(ShaderSources::vsSSBOTest, ShaderSources::fsSSBOTest);
+                    
+
 }
 
 void Renderer::SetupFramebuffers()
@@ -521,7 +521,7 @@ void Renderer::DrawFinalQuad()
     this->c->use();
     glUniform1f(glGetUniformLocation(this->c->ID, "t"), f);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
-    unsigned int numGroups = (N + 1023) / 1024; //256 local size
+    unsigned int numGroups = (N + 1023) / 1024; //1024 local size
 
     glDispatchCompute(numGroups, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);

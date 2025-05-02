@@ -204,7 +204,7 @@ namespace ShaderSources
             }
         }
         if (layer == -1) layer = cascadeCount;
-            
+                
         vec4 fragPosLightSpace = cascadeLightSpaceMatrices[layer] * vec4(fragPos, 1.0f);
 
         vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w; //bring to [-1,1] (if in frustum)
@@ -764,14 +764,16 @@ namespace ShaderSources
         // map to [0,1] range by dividing by far_plane
         lightDistance = lightDistance / pointShadowProjFarPlane;
     
-        // write this as modified depth
-        
+        //You can think of lightDistance as being an implicit function of the screen coordinates (screen_x, screen_y).
+        //dFdx(value) estimates the rate of change of value between the current fragment and the fragment immediately to its right
+        //dFdy(value) estimates the rate of change of value between the current fragment and the fragment immediately below it 
         float dx = dFdx(lightDistance);
         float dy = dFdx(lightDistance);
         
         //Remember: each pixel's depth is not constant if on a slope (especially low res shadowmaps)
         // this formula increases the variance based on the slope of the surface.
         // aka: adds the intra-pixel variance caused by the surface slope.
+    
         float momentY = lightDistance * lightDistance + clamp(0.25f * (dx * dx + dy * dy), 0.0f, 0.0001f);
         FragColor = vec2(lightDistance, momentY); //r: d g: d^2
     }
@@ -1231,7 +1233,7 @@ namespace ShaderSources
         vec3( 0.0,  0.0,  1.0),   // +Z   (face 4)
         vec3( 0.0,  0.0, -1.0)    // -Z   (face 5)
     );
-
+            
     // ---------------------------------------------
     // 2.  U-axis  (how local +u maps to world)
     // ---------------------------------------------
@@ -1325,7 +1327,7 @@ namespace ShaderSources
         float ampScale = (cos(t/4) + 1) / 2;
         positions[index].y = sin(u * 2.0f * 3.141f + (t/5)) * ampScale; 
     }
-    )";
+    )"; 
 
     const char* vsSSBOTest = R"(
     #version 450 core

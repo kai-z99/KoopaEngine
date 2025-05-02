@@ -20,7 +20,7 @@ public:
     unsigned int testTex;
     unsigned int testSSBO;
     Shader* SSBOTestShader;
-    int N = 1024;// *100000; //100,000,000
+    int N = 1024 * 100;// *100000; //100,000,000
     unsigned int testVAO;
 
     //Construction
@@ -99,6 +99,7 @@ private:
     Shader* ssaoShader;
     Shader* ssaoBlurShader;
     ComputeShader* c;
+    ComputeShader* particleUpdateComputeShader;
 
     //COMMAND BUFFER
     std::vector<DrawCall*> drawCalls;
