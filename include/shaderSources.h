@@ -1380,7 +1380,23 @@ namespace ShaderSources
 
     uniform float dt;
     uniform vec3 emitterPosition = vec3(0.0f);
-    uniform float maxLife = 5.0f;
+    uniform float maxLife = 3.0f;
+    uniform float particleSpeed = 4.0f;
+
+    uint WangHash(uint x)
+    {
+        x ^= x >> 16;
+        x *= 0x7feb352d;
+        x ^= x >> 15;
+        x *= 0x846ca68b;
+        x ^= x >> 16;
+        return x;
+    }
+
+    float Random(uint seed)
+    {
+        return float(WangHash(seed)) / float(0xFFFFFFFFu);
+    }
 
     void main()
     {
@@ -1393,18 +1409,48 @@ namespace ShaderSources
         {
             //respawn it
             particles[id].pos = emitterPosition;
-            
-            //give it a random velocity
-            particles[id].vel = normalize(vec3(1));
             particles[id].life = maxLife;
             
+            //give it a random velocity
+            uint seed = id + gl_WorkGroupID.x * 256;
+            vec3 rnd;
+            rnd.x = Random(seed + 1) * 2.0f - 1.0f; //[-1,1]
+            rnd.y = Random(seed + 2) * 2.0f - 1.0f; //[-1,1]
+            rnd.z = Random(seed + 3) * 2.0f - 1.0f; //[-1,1]
+
+            particles[id].vel = normalize(rnd) * particleSpeed * Random(seed + 4); 
         }
         //alive, time step
         else
         {
-            particles[id].vel.y -= (9.81f * dt);
+            particles[id].vel.y -= (0.81f * dt);
             particles[id].pos   += (particles[id].vel * dt);
         }
+    }
+    )";
+
+    const char* vsParticle = R"(
+    #version 450 core
+    
+    layout (location = 0) in vec3 aPos; //from VAO
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    void main()
+    {
+        gl_Position = projection * view * vec4(aPos, 1.0f);
+        gl_PointSize = 0.5f;
+    }
+    )";
+
+    const char* fsParticle = R"(
+    #version 450 core
+    
+    out vec4 FragColor;
+    
+    void main()
+    {
+        FragColor = vec4(1.0f);
     }
     )";
 }

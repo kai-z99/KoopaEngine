@@ -111,6 +111,7 @@ private:
     Shader* geometryPassShader;
     Shader* ssaoShader;
     Shader* ssaoBlurShader;
+    Shader* particleShader;
     ComputeShader* c;
     ComputeShader* particleUpdateComputeShader;
 

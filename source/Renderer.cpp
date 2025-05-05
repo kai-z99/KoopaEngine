@@ -126,6 +126,7 @@ Renderer::Renderer()
     //PARTICLES
     for (auto& p : this->particles)
     {
+        //make this random?
         p.life = 0.0f;
         //rest will be overwritten in compute shader
     }
@@ -139,11 +140,16 @@ Renderer::Renderer()
 
     glGenVertexArrays(1, &this->particleInstanceVAO);
     glBindVertexArray(this->particleInstanceVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, this->particleSSBO);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle) * NUM_PARTICLES, (void*)offsetof(Particle, position)); //location = 0
+    glBindBuffer(GL_ARRAY_BUFFER, this->particleSSBO); //just contains all particles
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, position)); //location = 0
     glVertexAttribDivisor(0, 1); //1 move per instance
+    glEnableVertexAttribArray(0);
+
     glBindVertexArray(0);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        std::cerr << "!!! OpenGL Error: " << err << std::endl;
+    }
 
 }
 
@@ -255,6 +261,7 @@ void Renderer::InitializeShaders()
     this->SSBOTestShader = new Shader(ShaderSources::vsSSBOTest, ShaderSources::fsSSBOTest);
 
     this->particleUpdateComputeShader = new ComputeShader(ShaderSources::csParticle);
+    this->particleShader = new Shader(ShaderSources::vsParticle, ShaderSources::fsParticle);
                     
 
 }
@@ -558,7 +565,7 @@ void Renderer::DrawFinalQuad()
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
     //glDrawArrays(GL_POINTS, 0, N);
     glBindVertexArray(0);
-    glEnable(GL_DEPTH_TEST);
+    //glEnable(GL_DEPTH_TEST);
 
     //PARTICLE
     this->particleUpdateComputeShader->use();
@@ -573,6 +580,17 @@ void Renderer::DrawFinalQuad()
     unsigned int groups = (NUM_PARTICLES + 1023) / 1024; //ceil(groups / localsize);
     glDispatchCompute(groups, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+    this->particleShader->use();
+    glBindVertexArray(this->particleInstanceVAO);
+    glDrawArraysInstanced(GL_POINTS, 0, 1, NUM_PARTICLES);
+    glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        std::cerr << "!!! OpenGL Error: " << err << std::endl;
+    }
 }
 
 void Renderer::BlurBrightScene()
@@ -1455,6 +1473,11 @@ void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projec
 
     this->ssaoShader->use();
     glUniformMatrix4fv(glGetUniformLocation(ssaoShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    this->particleShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
 }
 
 void Renderer::SendOtherUniforms()
