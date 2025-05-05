@@ -18,10 +18,7 @@ class Renderer
 public:
     //TEMP
     Camera* cam;
-    std::vector<ParticleEmitter*> particleEmitters;
-    ParticleEmitter* p;
-    ParticleEmitter* p2;
-
+    
     //Construction
 	Renderer();
 	~Renderer();
@@ -38,7 +35,7 @@ public:
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
-    void CreateParticleEmitter(Vec3 pos, Vec3 size, Vec4 rotation);
+    void CreateParticleEmitter(double duration, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Lighting
     void AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow);
@@ -82,6 +79,7 @@ private:
     void DrawSkybox();
     void BlurBrightScene();
     void DrawFinalQuad();
+    void CleanUpParticles();
 
     //SHADER OBJECTS
     Shader* lightingShader; 
@@ -104,6 +102,7 @@ private:
 
     //COMMAND BUFFER
     std::vector<DrawCall*> drawCalls;
+    std::vector<ParticleEmitter*> particleEmitters;
 
     //MATERIAL
     Material currentMaterial;

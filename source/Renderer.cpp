@@ -337,6 +337,9 @@ void Renderer::EndRenderFrame()
     //reset lights for the next frame
     this->SetAndSendAllLightsToFalse(); //uniforms are sent here too.
     this->drawCalls.clear(); //raylib style
+
+    this->CleanUpParticles();
+
 }
 
 void Renderer::RenderMainScene()
@@ -383,6 +386,21 @@ void Renderer::RenderMainScene()
         }
         glActiveTexture(GL_TEXTURE0);
     }
+
+    //PARTICLE
+    this->particleUpdateComputeShader->use();
+    static double lastTime = glfwGetTime();
+    double now = glfwGetTime();
+    float dt = float(now - lastTime);
+    lastTime = now;
+
+    for (ParticleEmitter* p : this->particleEmitters)
+    {
+        p->Update(this->particleUpdateComputeShader, dt);
+        p->Render(this->particleShader);
+    }
+
+    std::cout << "Size: " << this->particleEmitters.size() << '\n';
 
     //blit msaa hdr texture to normal hdr texture
     glBindFramebuffer(GL_READ_FRAMEBUFFER, this->hdrMSAAFBO);
@@ -477,20 +495,25 @@ void Renderer::DrawFinalQuad()
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     
-    //PARTICLE
-    this->particleUpdateComputeShader->use();
-    static double lastTime = glfwGetTime();
-    double now = glfwGetTime();
-    float dt = float(now - lastTime);
-    lastTime = now;
+}
+
+void Renderer::CleanUpParticles()
+{
+    std::vector<ParticleEmitter*> temp;
 
     for (ParticleEmitter* p : this->particleEmitters)
     {
-        p->Update(this->particleUpdateComputeShader, dt);
-        p->Render(this->particleShader);
+        if (!p->DoneEmitting())
+        {
+            temp.push_back(p);
+        }
+        else
+        {
+            delete p;
+        }
     }
-    
 
+    this->particleEmitters = temp;
 }
 
 void Renderer::BlurBrightScene()
@@ -1195,7 +1218,7 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
     this->drawCalls.back()->SetHeightMapPath(path);
 }
 
-void Renderer::CreateParticleEmitter(Vec3 pos, Vec3 size, Vec4 rotation)
+void Renderer::CreateParticleEmitter(double duration, Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size );
     static double lastTime = glfwGetTime();
@@ -1203,7 +1226,7 @@ void Renderer::CreateParticleEmitter(Vec3 pos, Vec3 size, Vec4 rotation)
     float dt = float(now - lastTime);
     lastTime = now;
     
-    this->particleEmitters.push_back(new ParticleEmitter(model, 1024 * 100));
+    this->particleEmitters.push_back(new ParticleEmitter(model, 1024 * 6000, duration));
 }
 
 void Renderer::DrawLightsDebug()

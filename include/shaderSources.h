@@ -1368,7 +1368,7 @@ namespace ShaderSources
     struct Particle
     {
         vec4 posLife;
-        vec4 vel;
+        vec4 velActive;
     };
 
     layout(std430, binding = 1) buffer Particles
@@ -1380,6 +1380,7 @@ namespace ShaderSources
     uniform vec3 emitterPosition = vec3(0.0f, 0.0f, 0.0f);
     uniform float maxLife = 3.0f;
     uniform float particleSpeed = 20.0f;
+    uniform bool doneEmitting;
 
     uint WangHash(uint x)
     {
@@ -1405,29 +1406,32 @@ namespace ShaderSources
         //particle is dead
         if (particles[id].posLife.w <= 0.0f)
         {
-            uint seed = id + gl_WorkGroupID.x * 256;
-            //respawn it
-            particles[id].posLife.xyz = emitterPosition;
-            particles[id].posLife.w = maxLife;
+            if (!doneEmitting)
+            {
+                uint seed = id + gl_WorkGroupID.x * 256;
+                //respawn it
+                particles[id].posLife.xyz = emitterPosition;
+                particles[id].posLife.w = maxLife;
             
-            //give it a random velocity
-            
-            vec3 rnd;
-            rnd.x = Random(seed + 1) * 2.0f - 1.0f; //[-1,1]
-            rnd.y = Random(seed + 2) + 0.75; //[0,1]
-            rnd.z = Random(seed + 3) * 2.0f - 1.0f; //[-1,1]
+                //give it a random velocity
+                vec3 rnd;
+                rnd.x = Random(seed + 1) * 2.0f - 1.0f; //[-1,1]
+                rnd.y = Random(seed + 2) + 0.75;        //[0,1]
+                rnd.z = Random(seed + 3) * 2.0f - 1.0f; //[-1,1]
 
-            particles[id].vel.xyz = normalize(rnd) * particleSpeed * Random(seed + 4); 
-            particles[id].vel.w = 1.0f;
+                particles[id].velActive.xyz = normalize(rnd) * particleSpeed * Random(seed + 4); 
+                particles[id].velActive.w = 1.0f;
+            }
+            else
+            {
+                particles[id].velActive.w = -1.0f;
+            }
         }
         //alive, time step
         else
         {
-            if (particles[id].vel.w > 0)
-            {
-                particles[id].vel.y -= (3.81f * dt);
-                particles[id].posLife.xyz   += (particles[id].vel.xyz * dt);
-            } 
+            particles[id].velActive.y -= (3.81f * dt);
+            particles[id].posLife.xyz += (particles[id].velActive.xyz * dt);
         }
     }
     )";
@@ -1437,12 +1441,14 @@ namespace ShaderSources
     
     layout (location = 0) in vec3 aPos; //from VAO
     layout (location = 1) in float aLife; //from VAO
+    layout (location = 2) in float aIsActive; //from VAO
 
     uniform mat4 view;
     uniform mat4 projection;
     uniform mat4 model;
 
     out float life;
+    out float isActive;
 
     void main()
     {
@@ -1450,6 +1456,7 @@ namespace ShaderSources
         gl_PointSize = 0.5f;
 
         life = aLife;
+        isActive = aIsActive;
     }
     )";
 
@@ -1459,10 +1466,12 @@ namespace ShaderSources
     out vec4 FragColor;
     
     in float life;
+    in float isActive;
 
     void main()
     {
-        FragColor = vec4(life, 3.0f - life, 0.0f, 1.0f);
+        if (isActive > 0.0f) FragColor = vec4(life, 3.0f - life, 0.0f, 1.0f);
+        else discard;
     }
     )";
 }
