@@ -157,6 +157,7 @@
     <Image Include="wood.png" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="helpers.h" />
     <ClInclude Include="include\Camera.h" />
     <ClInclude Include="include\ComputeShader.h" />
     <ClInclude Include="include\Constants.h" />

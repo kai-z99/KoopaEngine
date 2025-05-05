@@ -13,6 +13,7 @@
 #include "../include/Setup.h"
 #include "../include/Camera.h"
 #include "../include/Model.h"
+#include "../include/helpers.h"
 
 #include <iostream>
 #include <random>
@@ -126,8 +127,8 @@ Renderer::Renderer()
     //PARTICLES
     for (auto& p : this->particles)
     {
-        //make this random?
-        p.life = 0.0f;
+        p.positionLife = glm::vec4(0.0f, 0.0f, 0.0f, 3.0f * RandomFloat01());
+        p.velocity = glm::vec4(0.0f);
         //rest will be overwritten in compute shader
     }
 
@@ -141,10 +142,15 @@ Renderer::Renderer()
     glGenVertexArrays(1, &this->particleInstanceVAO);
     glBindVertexArray(this->particleInstanceVAO);
     glBindBuffer(GL_ARRAY_BUFFER, this->particleSSBO); //just contains all particles
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, position)); //location = 0
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, positionLife)); //location = 0
     glVertexAttribDivisor(0, 1); //1 move per instance
     glEnableVertexAttribArray(0);
 
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)(offsetof(Particle, positionLife) + sizeof(float) * 3)); //location = 1
+    glVertexAttribDivisor(1, 1); //1 move per instance
+    glEnableVertexAttribArray(1);
+        
     glBindVertexArray(0);
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {

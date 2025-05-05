@@ -26,10 +26,8 @@ public:
     //particle - temp
     struct Particle
     {
-        glm::vec3 position; //12
-        glm::vec3 velocity; //12
-        float life;         //4
-        float pad;          //4 = 32
+        glm::vec4 positionLife; //16
+        glm::vec4 velocity;     //16
     };
     const unsigned int NUM_PARTICLES = 2048 * 1000;
     std::vector<Particle> particles = std::vector<Particle>(NUM_PARTICLES);
