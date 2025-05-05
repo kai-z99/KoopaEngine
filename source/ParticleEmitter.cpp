@@ -17,10 +17,11 @@ ParticleEmitter::ParticleEmitter(glm::mat4 model, unsigned int particleCount, do
 
     std::vector<Particle> particles = std::vector<Particle>(particleCount);
 
+    //TODO: Do this setup on the gpu woth compute shader.
     //PARTICLES
     for (auto& p : particles)
     {
-        p.positionLife = glm::vec4(0.0f, 0.0f, 0.0f, 3.0f * RandomFloat01());
+        p.positionLife = glm::vec4(0.0f, 0.0f, 0.0f, maxLife * RandomFloat01());
         p.velocityActive = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
         //rest will be overwritten in compute shader
     }

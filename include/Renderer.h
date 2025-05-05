@@ -35,7 +35,7 @@ public:
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
-    void CreateParticleEmitter(double duration, Vec3 pos, Vec3 size, Vec4 rotation);
+    void CreateParticleEmitter(double duration, unsigned int count, Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Lighting
     void AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow);

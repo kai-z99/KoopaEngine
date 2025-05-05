@@ -1218,7 +1218,7 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
     this->drawCalls.back()->SetHeightMapPath(path);
 }
 
-void Renderer::CreateParticleEmitter(double duration, Vec3 pos, Vec3 size, Vec4 rotation)
+void Renderer::CreateParticleEmitter(double duration, unsigned int count, Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size );
     static double lastTime = glfwGetTime();
@@ -1226,7 +1226,7 @@ void Renderer::CreateParticleEmitter(double duration, Vec3 pos, Vec3 size, Vec4 
     float dt = float(now - lastTime);
     lastTime = now;
     
-    this->particleEmitters.push_back(new ParticleEmitter(model, 1024 * 6000, duration));
+    this->particleEmitters.push_back(new ParticleEmitter(model, count, duration));
 }
 
 void Renderer::DrawLightsDebug()
