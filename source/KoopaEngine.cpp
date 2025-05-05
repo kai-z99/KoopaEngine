@@ -203,6 +203,11 @@ void KoopaEngine::DrawDirLight(Vec3 dir, Vec3 col, float intensity, bool shadows
     this->renderer->AddDirLightToFrame(dir, col, intensity, shadows);
 }
 
+void KoopaEngine::SetParticleEmitter(Vec3 pos, Vec3 scale, Vec4 rotation)
+{
+    this->renderer->CreateParticleEmitter(pos, scale, rotation);
+}
+
 void KoopaEngine::SetDrawLightsDebug(bool on)
 {
     this->renderer->drawDebugLights = on;

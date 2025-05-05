@@ -11,28 +11,16 @@ class ComputeShader;
 class DrawCall;
 class Camera;
 class Model;
+class ParticleEmitter;
 
 class Renderer
 {
 public:
     //TEMP
     Camera* cam;
-    unsigned int testTex;
-    unsigned int testSSBO;
-    Shader* SSBOTestShader;
-    int N = 1024 * 100;// *100000; //100,000,000
-    unsigned int testVAO;
-
-    //particle - temp
-    struct Particle
-    {
-        glm::vec4 positionLife; //16
-        glm::vec4 velocity;     //16
-    };
-    const unsigned int NUM_PARTICLES = 2048 * 1000;
-    std::vector<Particle> particles = std::vector<Particle>(NUM_PARTICLES);
-    unsigned int particleSSBO;
-    unsigned int particleInstanceVAO;
+    std::vector<ParticleEmitter*> particleEmitters;
+    ParticleEmitter* p;
+    ParticleEmitter* p2;
 
     //Construction
 	Renderer();
@@ -50,6 +38,7 @@ public:
     void DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation);
     void DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation);
+    void CreateParticleEmitter(Vec3 pos, Vec3 size, Vec4 rotation);
 
     //Lighting
     void AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow);

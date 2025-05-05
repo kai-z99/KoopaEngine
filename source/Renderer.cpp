@@ -13,7 +13,7 @@
 #include "../include/Setup.h"
 #include "../include/Camera.h"
 #include "../include/Model.h"
-#include "../include/helpers.h"
+#include "../include/ParticleEmitter.h"
 
 #include <iostream>
 #include <random>
@@ -82,81 +82,6 @@ Renderer::Renderer()
     glGetIntegerv(GL_MINOR_VERSION, &minor);
     printf("OpenGL version: %d.%d\n", major, minor);
     printf("%s\n", glGetString(GL_VERSION));
-
-    glGenTextures(1, &testTex);
-    glBindTexture(GL_TEXTURE_2D, testTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 512, 512, 0, GL_RGBA, GL_FLOAT, NULL);
-
-    glBindImageTexture(0, testTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); //binding = 0
-
-    std::vector<glm::vec4> initPos(N);
-    for (size_t i = 0; i < N; i++)
-    {
-        float angle = (float)i / (float)N * 2.0f * PI; //2pi * [0,1]
-        initPos[i] = glm::vec4(cos(angle), sin(angle), 0.0f, 1.0f);
-    }
-
-    glGenBuffers(1, &testSSBO);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, testSSBO);
-
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(glm::vec4) * N, initPos.data(), GL_DYNAMIC_COPY);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); // binding = 0
-                            
-    glGenVertexArrays(1, &testVAO);
-    glBindVertexArray(testVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, testSSBO);
-    glVertexAttribPointer(
-        0,                // layout(location=0) in your VS
-        4,                // 4 floats per vertex (vec4)
-        GL_FLOAT,
-        GL_FALSE,
-        sizeof(glm::vec4),// stride
-        (void*)0          // offset
-    );
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); 
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
-    //PARTICLES
-    for (auto& p : this->particles)
-    {
-        p.positionLife = glm::vec4(0.0f, 0.0f, 0.0f, 3.0f * RandomFloat01());
-        p.velocity = glm::vec4(0.0f);
-        //rest will be overwritten in compute shader
-    }
-
-    glGenBuffers(1, &this->particleSSBO);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, this->particleSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * NUM_PARTICLES, this->particles.data(), GL_DYNAMIC_COPY);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this->particleSSBO); //binding = 1
-    //unbind
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    glGenVertexArrays(1, &this->particleInstanceVAO);
-    glBindVertexArray(this->particleInstanceVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, this->particleSSBO); //just contains all particles
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)offsetof(Particle, positionLife)); //location = 0
-    glVertexAttribDivisor(0, 1); //1 move per instance
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(Particle), (void*)(offsetof(Particle, positionLife) + sizeof(float) * 3)); //location = 1
-    glVertexAttribDivisor(1, 1); //1 move per instance
-    glEnableVertexAttribArray(1);
-        
-    glBindVertexArray(0);
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        std::cerr << "!!! OpenGL Error: " << err << std::endl;
-    }
-
 }
 
 void Renderer::InitializeShaders()
@@ -262,9 +187,6 @@ void Renderer::InitializeShaders()
     //vsm blur
     this->vsmPointBlurShader = new Shader(ShaderSources::vsScreenQuad, ShaderSources::fsVSMPointBlur);
     glUniform1i(glGetUniformLocation(this->vsmPointBlurShader->ID, "source"), 0);            //GL_TEXTURE0
-
-    this->c = new ComputeShader(ShaderSources::csSSBOTest);
-    this->SSBOTestShader = new Shader(ShaderSources::vsSSBOTest, ShaderSources::fsSSBOTest);
 
     this->particleUpdateComputeShader = new ComputeShader(ShaderSources::csParticle);
     this->particleShader = new Shader(ShaderSources::vsParticle, ShaderSources::fsParticle);
@@ -555,48 +477,20 @@ void Renderer::DrawFinalQuad()
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     
-    //TESTING
-    static float f = 0;
-    f++;
-    this->c->use();
-    glUniform1f(glGetUniformLocation(this->c->ID, "t"), f);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
-    unsigned int numGroups = (N + 1023) / 1024; //1024 local size
-
-    //glDispatchCompute(numGroups, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glBindVertexArray(testVAO);
-    this->SSBOTestShader->use();
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, testSSBO); //binding = 0
-    //glDrawArrays(GL_POINTS, 0, N);
-    glBindVertexArray(0);
-    //glEnable(GL_DEPTH_TEST);
-
     //PARTICLE
     this->particleUpdateComputeShader->use();
     static double lastTime = glfwGetTime();
     double now = glfwGetTime();
     float dt = float(now - lastTime);
     lastTime = now;
-    
-    glUniform1f(glGetUniformLocation(this->particleUpdateComputeShader->ID, "dt"), dt);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this->particleSSBO); //to be safe
-    unsigned int groups = (NUM_PARTICLES + 1023) / 1024; //ceil(groups / localsize);
-    glDispatchCompute(groups, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-
-    this->particleShader->use();
-    glBindVertexArray(this->particleInstanceVAO);
-    glDrawArraysInstanced(GL_POINTS, 0, 1, NUM_PARTICLES);
-    glBindVertexArray(0);
-
-    glEnable(GL_DEPTH_TEST);
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        std::cerr << "!!! OpenGL Error: " << err << std::endl;
+    for (ParticleEmitter* p : this->particleEmitters)
+    {
+        p->Update(this->particleUpdateComputeShader, dt);
+        p->Render(this->particleShader);
     }
+    
+
 }
 
 void Renderer::BlurBrightScene()
@@ -1299,6 +1193,17 @@ void Renderer::DrawTerrain(const char* path, Vec3 pos, Vec3 size, Vec4 rotation)
         this->currentMaterial, model, GL_PATCHES));
 
     this->drawCalls.back()->SetHeightMapPath(path);
+}
+
+void Renderer::CreateParticleEmitter(Vec3 pos, Vec3 size, Vec4 rotation)
+{
+    glm::mat4 model = CreateModelMatrix(pos, rotation, size );
+    static double lastTime = glfwGetTime();
+    double now = glfwGetTime();
+    float dt = float(now - lastTime);
+    lastTime = now;
+    
+    this->particleEmitters.push_back(new ParticleEmitter(model, 1024 * 100));
 }
 
 void Renderer::DrawLightsDebug()

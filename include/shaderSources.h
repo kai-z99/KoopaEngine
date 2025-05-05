@@ -1379,7 +1379,7 @@ namespace ShaderSources
     uniform float dt;
     uniform vec3 emitterPosition = vec3(0.0f, 0.0f, 0.0f);
     uniform float maxLife = 3.0f;
-    uniform float particleSpeed = 70.0f;
+    uniform float particleSpeed = 20.0f;
 
     uint WangHash(uint x)
     {
@@ -1418,12 +1418,12 @@ namespace ShaderSources
             rnd.z = Random(seed + 3) * 2.0f - 1.0f; //[-1,1]
 
             particles[id].vel.xyz = normalize(rnd) * particleSpeed * Random(seed + 4); 
-            particles[id].vel.w = 1;
+            particles[id].vel.w = 1.0f;
         }
         //alive, time step
         else
         {
-            if (particles[id].vel.w == 1)
+            if (particles[id].vel.w > 0)
             {
                 particles[id].vel.y -= (3.81f * dt);
                 particles[id].posLife.xyz   += (particles[id].vel.xyz * dt);
@@ -1440,12 +1440,13 @@ namespace ShaderSources
 
     uniform mat4 view;
     uniform mat4 projection;
+    uniform mat4 model;
 
     out float life;
 
     void main()
     {
-        gl_Position = projection * view * vec4(aPos, 1.0f);
+        gl_Position = projection * view * model * vec4(aPos, 1.0f);
         gl_PointSize = 0.5f;
 
         life = aLife;
