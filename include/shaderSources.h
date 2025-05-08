@@ -141,6 +141,32 @@ namespace ShaderSources
     float CalculateLinearFog();
 
     const float gamma = 2.2;
+
+    
+    struct GPUPointLight    
+    {    
+        vec4 positionRange;   
+        vec4 colorIntensity; 
+        uint isActive;
+        uint castShadows;
+        uint pad0, pad1; //48
+    };
+
+    layout(std430, binding = 1) buffer Lights
+    {
+        GPUPointLight lights[];  
+    };
+
+    layout(std430, binding = 2) buffer TileIndices
+    {
+        uint indices[];
+    };
+    
+    layout(std430, binding = 3) buffer TileCount
+    {
+        uint counts[];
+    };
+
     )"
     R"(
     void main()
@@ -1377,8 +1403,8 @@ namespace ShaderSources
     };
 
     uniform float dt;
-    uniform vec3 emitterPosition = vec3(0.0f, 0.0f, 0.0f);
-    uniform float maxLife = 3.0f;
+    uniform vec3 emitterPosition = vec3(0.0f, 0.0f, 0.0f); //model space
+    uniform float maxLife;
     uniform float particleSpeed = 20.0f;
     uniform bool doneEmitting;
 
@@ -1470,10 +1496,98 @@ namespace ShaderSources
 
     void main()
     {
-        if (isActive > 0.0f) FragColor = vec4(life, 3.0f - life, 0.0f, 1.0f);
+        if (isActive > 0.0f) FragColor = vec4(life, 3.0f - life, 0.0f, 1.);
         else discard;
     }
     )";
+
+    const char* csTileCulling = R"(
+    #version 450 core
+    layout(local_size_x = 16, local_size_y = 16) in;
+    
+    struct GPUPointLight {    
+        vec4 positionRange;   
+        vec4 colorIntensity; 
+        uint isActive;
+        uint castShadows;
+        uint pad0, pad1; //48
+    };    
+
+    layout(std430, binding = 1) buffer Lights
+    {
+        GPUPointLight lights[];  
+    };
+
+    layout(std430, binding = 2) buffer TileIndices
+    {
+        uint indices[];
+    };
+    
+    layout(std430, binding = 3) buffer TileCount
+    {
+        uint counts[];
+    };
+    
+    uniform float farPlane;
+
+    uniform mat4 view;
+    uniform mat4 projection;
+    uniform vec2 screen; //w , h
+
+    const uint MAX_LIGHTS_PER_TILE = 128;
+    uniform int numLights;
+
+    void main()
+    {
+        uvec2 tileCoords = gl_WorkGroupID.xy;
+        if (tileCoords.x >= uint(screen.x)/16 || tileCoords.y >= uint(screen.y)/16 )
+        {
+            return;
+        }
+
+        uint tileID = tileCoords.y * uint(screen.x / 16) + tileCoords.x;
+        uint base = tileID * MAX_LIGHTS_PER_TILE;
+
+        if (gl_LocalInvocationIndex == 0) counts[tileID] = 0;
+        memoryBarrierBuffer();
+        barrier();
+
+        //corners
+        vec2 px0 = vec2(tileCoords) * 16.0f;
+        vec2 px1 = px0 + 16.0f;
+        
+        for (uint i = gl_LocalInvocationIndex; i < numLights; i += 256)
+        {
+            GPUPointLight l = lights[i];
+            if (l.isActive == 0u) continue;
+            
+            vec4 viewPos = view * vec4(l.positionRange.xyz, 1.0f);
+            float z = -viewPos.z;
+
+            float radius = (farPlane / 7.5f) * (l.positionRange.w / 100.0f);
+            float radiusScreenSpace = (radius / z) * projection[1][1] * screen.y * 0.5;
+            
+            vec4 clip = projection * viewPos;
+            vec2 ndc = clip.xy / clip.w;
+            vec2 center = (ndc * 0.5f + 0.5f) * screen;
+            
+            vec2 closest = clamp(center, px0, px1);
+            float d2 = distance(center, closest);
+            bool inside = d2 < radiusScreenSpace;
+
+            if (inside)
+            {
+                uint index = atomicAdd(counts[tileID], 1);
+                if (index < MAX_LIGHTS_PER_TILE)
+                {
+                    indices[base + index] = i;
+                }        
+            }
+        }
+    }
+    )";
+
+
 }
 
 

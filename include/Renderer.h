@@ -17,7 +17,20 @@ class Renderer
 {
 public:
     //TEMP
+    struct PointLightGPU
+    {
+        glm::vec4 positionRange;
+        glm::vec4 colorIntensity;  
+        uint32_t  isActive;
+        uint32_t  castShadows;
+        uint32_t  pad0, pad1;
+    };
+    unsigned int lightSSBO, indexSSBO, countSSBO;
+    ComputeShader* tileCullShader;
+    PointLightGPU pointLightsForward[MAX_POINT_LIGHTS_PLUS];
+    unsigned int currentFramePointLightCountPlus;
     Camera* cam;
+
     
     //Construction
 	Renderer();
@@ -80,6 +93,7 @@ private:
     void BlurBrightScene();
     void DrawFinalQuad();
     void CleanUpParticles();
+    void DoTileCulling();
 
     //SHADER OBJECTS
     Shader* lightingShader; 
@@ -144,6 +158,7 @@ private:
             : position(pos), color(col), range(range), intensity(intensity), isActive(active), castShadows(shadow) {}
     };
     PointLight pointLights[MAX_POINT_LIGHTS];
+    
     unsigned int currentFramePointLightCount;
     void SendPointLightUniforms(Shader* shader, unsigned int index);
     float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;

@@ -82,6 +82,35 @@ Renderer::Renderer()
     glGetIntegerv(GL_MINOR_VERSION, &minor);
     printf("OpenGL version: %d.%d\n", major, minor);
     printf("%s\n", glGetString(GL_VERSION));
+
+
+
+    uint32_t nx = (SCREEN_WIDTH + TILE_SIZE - 1) / TILE_SIZE;
+    uint32_t ny = (SCREEN_HEIGHT + TILE_SIZE - 1) / TILE_SIZE;
+    uint32_t nTiles = nx * ny;
+
+    //TEMP
+    glCreateBuffers(1, &lightSSBO);
+    glCreateBuffers(1, &indexSSBO);
+    glCreateBuffers(1, &countSSBO);
+                
+    //lights
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PointLightGPU) * MAX_POINT_LIGHTS_PLUS, NULL, GL_DYNAMIC_COPY);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, lightSSBO); //binding = 1
+
+    //indexSSBO
+    size_t indexBufBytes = nTiles * MAX_LIGHTS_PER_TILE * sizeof(GLuint);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, indexSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, indexBufBytes, nullptr, GL_DYNAMIC_COPY);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indexSSBO);
+
+    //count
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, countSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, nTiles * sizeof(GLuint), nullptr, GL_DYNAMIC_COPY);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, countSSBO);
+
+    static_assert(sizeof(PointLightGPU) % 16 == 0, "std430 alignment");  
 }
 
 void Renderer::InitializeShaders()
@@ -191,6 +220,7 @@ void Renderer::InitializeShaders()
     this->particleUpdateComputeShader = new ComputeShader(ShaderSources::csParticle);
     this->particleShader = new Shader(ShaderSources::vsParticle, ShaderSources::fsParticle);
                     
+    this->tileCullShader = new ComputeShader(ShaderSources::csTileCulling);
 
 }
 
@@ -313,6 +343,8 @@ void Renderer::EndRenderFrame()
 
     //Render the ssao Texture
     this->RenderSSAO();
+
+    this->DoTileCulling();
 
     glEnable(GL_BLEND);
 
@@ -514,6 +546,30 @@ void Renderer::CleanUpParticles()
     }
 
     this->particleEmitters = temp;
+}
+
+void Renderer::DoTileCulling()
+{
+    uint32_t nx = (SCREEN_WIDTH + TILE_SIZE - 1) / TILE_SIZE;
+    uint32_t ny = (SCREEN_HEIGHT + TILE_SIZE - 1) / TILE_SIZE;
+    uint32_t nTiles = nx * ny;
+
+    glClearBufferSubData(countSSBO, GL_R32UI, 0, nTiles * sizeof(uint32_t), GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
+    glClearBufferSubData(indexSSBO, GL_R32UI, 0, nTiles * MAX_LIGHTS_PER_TILE * sizeof(uint32_t), GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
+
+    size_t n = std::min(currentFramePointLightCountPlus, MAX_POINT_LIGHTS_PLUS);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(PointLightGPU) * n, this->pointLightsForward); //no need to clear, we loop with numLights
+
+    this->tileCullShader->use();
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, lightSSBO); //binding = 1
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indexSSBO); //binding = 2
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, countSSBO); //binding = 3
+
+    glDispatchCompute(nx,ny, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 }
 
 void Renderer::BlurBrightScene()
@@ -773,7 +829,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far, int 
         worldUp = { 0.0f, 0.0f, 1.0f };
     }
 
-    //             subtract the negative of the lightDir from the center, moving the vector along -lightDir. (by 1 unit)
+    //subtract the negative of the lightDir from the center, moving the vector along -lightDir. (by 1 unit)
     glm::mat4 lightView = glm::lookAt(center - glm::normalize(this->dirLight.direction), center, worldUp);
     
     //Proj
@@ -783,6 +839,7 @@ glm::mat4 Renderer::CalculateLightSpaceCascadeMatrix(float near, float far, int 
     float maxY = std::numeric_limits<float>::lowest();
     float minZ = std::numeric_limits<float>::max();
     float maxZ = std::numeric_limits<float>::lowest();
+
     for (const auto& c : corners)
     {
         glm::vec4 cLightSpace = lightView * c;
@@ -909,7 +966,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
     float near = SHADOW_PROJECTION_NEAR;
     float far = SHADOW_PROJECTION_FAR;
     glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near, far);
-
+                                    
     //Set shadow transforms
     this->shadowTransforms.clear();
     glm::vec3 lightPos = this->pointLights[index].position;   //view
@@ -1260,6 +1317,7 @@ void Renderer::DrawLightsDebug()
 void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow)
 {
     unsigned int i = this->currentFramePointLightCount;
+    unsigned int ip = this->currentFramePointLightCountPlus;
 
     if (i + 1 <= MAX_POINT_LIGHTS)
     {
@@ -1284,6 +1342,20 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float inten
     {
         std::cout << "ERROR: Max pointlights exceeded\n";
     }
+
+    PointLightGPU p = PointLightGPU();
+
+    p.isActive = true;
+    p.positionRange = { pos.x, pos.y, pos.z, std::min(range, 100.0f) };
+    p.colorIntensity = { col.r, col.g, col.b,intensity };
+    p.castShadows = shadow;
+
+    this->pointLightsForward[ip] = p;
+    this->currentFramePointLightCountPlus++;
+
+    this->tileCullShader->use();
+    glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), this->currentFramePointLightCountPlus);
+
 }
 
 void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shadow)
@@ -1316,6 +1388,11 @@ void Renderer::SetAndSendAllLightsToFalse()
 
     this->dirLight.isActive = false;
     this->SendDirLightUniforms();
+
+    this->tileCullShader->use();
+    glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), 0);
+    this->currentFramePointLightCountPlus = 0;
+
 }
 
 void Renderer::SendPointLightUniforms(Shader* shader, unsigned int index)
@@ -1411,6 +1488,13 @@ void Renderer::SendCameraUniforms(const glm::mat4& view, const glm::mat4& projec
     this->particleShader->use();
     glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    //temp
+    this->tileCullShader->use();
+    glUniformMatrix4fv(glGetUniformLocation(tileCullShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(tileCullShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform2f(glGetUniformLocation(tileCullShader->ID, "screen"), SCREEN_WIDTH, SCREEN_HEIGHT);
+    glUniform1f(glGetUniformLocation(tileCullShader->ID, "farPlane"), DEFAULT_FAR);
 
 }
 

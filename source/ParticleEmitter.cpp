@@ -51,12 +51,12 @@ ParticleEmitter::ParticleEmitter(glm::mat4 model, unsigned int particleCount, do
 
     glBindVertexArray(0);
 }
+
 ParticleEmitter::~ParticleEmitter()
 {
     glDeleteVertexArrays(1, &this->vao);
     glDeleteBuffers(1, &this->ssbo);
 }
-
 
 void ParticleEmitter::Update(ComputeShader* particleShader, float dt)
 {
