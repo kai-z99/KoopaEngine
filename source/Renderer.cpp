@@ -354,10 +354,9 @@ void Renderer::EndRenderFrame()
     //draw debug lights into hdrFBO is applicable
     this->DrawLightsDebug();
     
+    glDisable(GL_BLEND);
     //Draw skybox last (using z = w optimization)
     this->DrawSkybox();
-
-    glDisable(GL_BLEND);
 
     //DO BLOOM STUFF---
     this->BlurBrightScene();
@@ -381,15 +380,15 @@ void Renderer::RenderMainScene()
     glBindFramebuffer(GL_FRAMEBUFFER, this->hdrMSAAFBO);
 
     //clear main scene with current color, clear bright scene with black always.
-    glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    
 
     //Note: binding vsmtexture is expcted in renderdoc (only horiz blur) but uses emoty in realtime (OG)
     //      binding pointshadowmaptexture is expected in renderdoc (2 tap blur) but uses OG texture in realtime.
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
     glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_DEPTH_TEST);
     //render
     for (DrawCall* d : this->drawCalls)
     {
@@ -453,7 +452,7 @@ void Renderer::RenderShadowMaps()
     //point
     for (unsigned int i = 0; i < currentFramePointLightCount; i++)
     {
-        if (this->pointLights[i].castShadows)
+        if (this->pointLightsForward[i].castShadows)
         {
             this->RenderPointShadowMap(i);
         }
@@ -526,7 +525,6 @@ void Renderer::DrawFinalQuad()
     glBindTexture(GL_TEXTURE_2D, this->twoPassBlurTexturesRGBA[1]);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
-    
 }
 
 void Renderer::CleanUpParticles()
@@ -766,6 +764,7 @@ void Renderer::DrawSkybox()
         glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         this->skyShader->use();
+        glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
 
         //draw
@@ -779,6 +778,7 @@ void Renderer::DrawSkybox()
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDepthFunc(GL_LESS);
     }
+    glDisable(GL_DEPTH_TEST);
 }
 
 std::vector<glm::vec4> Renderer::GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view)
@@ -1347,7 +1347,7 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float inten
 
     p.isActive = true;
     p.positionRange = { pos.x, pos.y, pos.z, std::min(range, 100.0f) };
-    p.colorIntensity = { col.r, col.g, col.b,intensity };
+    p.colorIntensity = { col.r, col.g, col.b, intensity };
     p.castShadows = shadow;
 
     this->pointLightsForward[ip] = p;
@@ -1355,6 +1355,10 @@ void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float inten
 
     this->tileCullShader->use();
     glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), this->currentFramePointLightCountPlus);
+    this->lightingShader->use();
+    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLightsPlus"), this->currentFramePointLightCountPlus);
+    this->terrainShader->use();
+    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLightsPlus"), this->currentFramePointLightCountPlus);
 
 }
 

@@ -104,6 +104,7 @@ namespace ShaderSources
     //light
     uniform PointLight pointLights[4];
     uniform int numPointLights;
+    uniform int numPointLightsPlus;
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
     //shadow
@@ -121,6 +122,10 @@ namespace ShaderSources
     uniform vec3 fogColor;             //updated every frame in SendOtherUniforms(). ({0,0,0} means fog is disabled)
     uniform float expFogDensity;                    //SendOTherUniforms()
     uniform float linearFogStart;                   //SendOtherUniforms()
+    //forward+
+    uniform uint tileSize = 16;
+    uniform uvec2 screen = uvec2(1920, 1080);
+    const int MAX_LIGHTS_PER_TILE = 128;
 
     //UNIQUE UNIFORMS --------------------------------------------------------------------
     //material properties (Set by SendMaterialUniforms())
@@ -179,14 +184,36 @@ namespace ShaderSources
         vec3 normal = ChooseNormal();
         vec3 specular = ChooseSpecular();
 
+        uvec2 pix = uvec2(gl_FragCoord.xy);
+        uvec2 tile = pix / tileSize;
+        uint tileID = tile.y * uint(screen.x / 16) + tile.x;
+
         //LIGHTS
+        for (int i = 0; i < numPointLightsPlus; i++)
+        {
+            uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
+
+            GPUPointLight g = lights[lightIndex];
+            PointLight p;
+            p.position   = g.positionRange.xyz;
+            p.range      = g.positionRange.w;
+            p.color      = g.colorIntensity.rgb;
+            p.intensity  = g.colorIntensity.a;
+            p.isActive   = (g.isActive   != 0u);
+            p.castShadows= (g.castShadows!= 0u);
+
+            color += CalcPointLight(p, FragPos, viewDir, diffuse, normal, specular, i);
+        }
+
+        color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
+
+        /*
         for (int i = 0; i < numPointLights; i++)
         {
             color += CalcPointLight(pointLights[i], FragPos, viewDir, diffuse, normal, specular, i);
         }
-
-        color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
         
+        */    
         vec3 fragPosNDC = FragPosClipSpace.xyz / FragPosClipSpace.w; //perpective divide [-1,1]
         fragPosNDC = fragPosNDC * 0.5f + 0.5f; //[0,1]
         vec2 ssaoUV = fragPosNDC.xy;
@@ -202,7 +229,7 @@ namespace ShaderSources
             float fogFactor = CalculateFogFactor();
             color = mix(fogColor, color, fogFactor);
         }
-        
+
         if (hasAlpha) FragColor = FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
         else FragColor = vec4(color, 1.0f);
     }
@@ -280,7 +307,6 @@ namespace ShaderSources
 
         float Ed = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).r * pointShadowProjFarPlane; // E[d]
         float EdSq = texture(pointShadowMapArray, vec4(normalize(lightToFrag), index)).g * pointShadowProjFarPlane * pointShadowProjFarPlane; // E[d]^2
-        
         
         if (fragDepth <= Ed) //definitaly lit
         {
@@ -1573,7 +1599,7 @@ namespace ShaderSources
             
             vec2 closest = clamp(center, px0, px1);
             float d2 = distance(center, closest);
-            bool inside = d2 < radiusScreenSpace;
+            bool inside = d2 < radiusScreenSpace * 8;
 
             if (inside)
             {
