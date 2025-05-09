@@ -59,9 +59,8 @@ Renderer::Renderer()
     //Initialialize lighting
     this->bloomThreshold = 1.0f;
     this->ambientLighting = 0.015f;
-    this->InitializePointLights();
     this->InitializeDirLight();
-    this->currentFramePointLightCount = 0;
+    this->currentFramePointLightCountPlus = 0;
 
     //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
     //here in the constructor.
@@ -299,16 +298,6 @@ void Renderer::SetupVertexBuffers()
     this->skyboxMeshData = VertexBufferSetup::SetupSkyboxBuffers();
 }
 
-void Renderer::InitializePointLights()
-{
-    for (unsigned int i = 0; i < MAX_POINT_LIGHTS; i++)
-    {
-        this->pointLights[i] = PointLight();
-        this->SendPointLightUniforms(this->lightingShader, i);
-        this->SendPointLightUniforms(this->terrainShader, i);
-    }
-}
-
 void Renderer::InitializeDirLight()
 {
     DirLight d = DirLight();
@@ -450,13 +439,15 @@ void Renderer::RenderShadowMaps()
     if (this->dirLight.castShadows) this->RenderCascadedShadowMap(); //Sets active FB to the shadow one in function
 
     //point
-    for (unsigned int i = 0; i < currentFramePointLightCount; i++)
+    /*
+    for (unsigned int i = 0; i < currentFramePointLightCountPlus; i++)
     {
         if (this->pointLightsForward[i].castShadows)
         {
             this->RenderPointShadowMap(i);
         }
     }
+    */
 }
 
 void Renderer::RenderSSAO()
@@ -969,7 +960,7 @@ void Renderer::RenderPointShadowMap(unsigned int index)
                                     
     //Set shadow transforms
     this->shadowTransforms.clear();
-    glm::vec3 lightPos = this->pointLights[index].position;   //view
+    glm::vec3 lightPos = glm::vec3(this->pointLightsForward[index].positionRange);   //view
 
     this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0, 0.0, 0.0),  glm::vec3(0.0, -1.0, 0.0)));
     this->shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
@@ -1049,7 +1040,7 @@ void Renderer::BlurPointShadowMap(unsigned int index)
     vsmPointBlurShader->use();
     glActiveTexture(GL_TEXTURE0);
     glViewport(0, 0, P_SHADOW_WIDTH, P_SHADOW_HEIGHT);
-
+                    
     for (int pass = 0; pass < 2; ++pass)
     {
         bool horizontal = (pass == 0);
@@ -1293,6 +1284,7 @@ void Renderer::DrawLightsDebug()
 
     if (this->drawDebugLights)
     {
+        /*
         this->debugLightShader->use();
         glBindVertexArray(this->cubeMeshData.VAO);
 
@@ -1309,6 +1301,7 @@ void Renderer::DrawLightsDebug()
             glUniform1f(glGetUniformLocation(debugLightShader->ID, "intensity"), curr.intensity);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
+        */
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1316,49 +1309,33 @@ void Renderer::DrawLightsDebug()
 
 void Renderer::AddPointLightToFrame(Vec3 pos, Vec3 col, float range, float intensity, bool shadow)
 {
-    unsigned int i = this->currentFramePointLightCount;
     unsigned int ip = this->currentFramePointLightCountPlus;
 
-    if (i + 1 <= MAX_POINT_LIGHTS)
+    if (ip + 1 <= MAX_POINT_LIGHTS_PLUS)
     {
-        //"Activate the light"
-        this->pointLights[i].isActive = true;
-        this->pointLights[i].position = { pos.x, pos.y, pos.z };
-        this->pointLights[i].color = { col.r, col.g, col.b };
-        this->pointLights[i].range = std::min(range, 100.0f);
-        this->pointLights[i].intensity = intensity;
-        this->pointLights[i].castShadows = shadow;
-        
-        this->SendPointLightUniforms(this->lightingShader, this->currentFramePointLightCount);
-        this->SendPointLightUniforms(this->terrainShader, this->currentFramePointLightCount);
-        this->currentFramePointLightCount++;
+        PointLightGPU p = PointLightGPU();
 
+        p.isActive = true;
+        p.positionRange = { pos.x, pos.y, pos.z, std::min(range, 100.0f) };
+        p.colorIntensity = { col.r, col.g, col.b, intensity };
+        p.castShadows = shadow;
+
+        this->pointLightsForward[ip] = p;
+        this->currentFramePointLightCountPlus++;
+
+        this->tileCullShader->use();
+        glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), this->currentFramePointLightCountPlus);
         this->lightingShader->use();
-        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLights"), this->currentFramePointLightCount);
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLights"), this->currentFramePointLightCountPlus);
         this->terrainShader->use();
-        glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLights"), this->currentFramePointLightCount);
+        glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLights"), this->currentFramePointLightCountPlus);
     }
     else
     {
         std::cout << "ERROR: Max pointlights exceeded\n";
     }
 
-    PointLightGPU p = PointLightGPU();
 
-    p.isActive = true;
-    p.positionRange = { pos.x, pos.y, pos.z, std::min(range, 100.0f) };
-    p.colorIntensity = { col.r, col.g, col.b, intensity };
-    p.castShadows = shadow;
-
-    this->pointLightsForward[ip] = p;
-    this->currentFramePointLightCountPlus++;
-
-    this->tileCullShader->use();
-    glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), this->currentFramePointLightCountPlus);
-    this->lightingShader->use();
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLightsPlus"), this->currentFramePointLightCountPlus);
-    this->terrainShader->use();
-    glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLightsPlus"), this->currentFramePointLightCountPlus);
 
 }
 
@@ -1377,55 +1354,16 @@ void Renderer::AddDirLightToFrame(Vec3 dir, Vec3 col, float intensity, bool shad
 
 void Renderer::SetAndSendAllLightsToFalse()
 {
-    for (int i = 0; i < 4; i++)
-    {
-        this->pointLights[i].isActive = false;
-        this->SendPointLightUniforms(this->lightingShader, i);
-        this->SendPointLightUniforms(this->terrainShader, i);
-    }
-    this->currentFramePointLightCount = 0;
+    this->dirLight.isActive = false;
+    this->SendDirLightUniforms();
 
     this->lightingShader->use();
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "numPointLights"), 0);
     this->terrainShader->use();
     glUniform1i(glGetUniformLocation(this->terrainShader->ID, "numPointLights"), 0);
-
-    this->dirLight.isActive = false;
-    this->SendDirLightUniforms();
-
     this->tileCullShader->use();
     glUniform1i(glGetUniformLocation(this->tileCullShader->ID, "numLights"), 0);
     this->currentFramePointLightCountPlus = 0;
-
-}
-
-void Renderer::SendPointLightUniforms(Shader* shader, unsigned int index)
-{
-    shader->use();
-
-    std::string s = "pointLights[" + std::to_string(index) + "].position";
-    const char* cs = s.c_str();
-    glUniform3fv(glGetUniformLocation(shader->ID, cs), 1, glm::value_ptr(this->pointLights[index].position));
-
-    s = "pointLights[" + std::to_string(index) + "].color";
-    const char* csc = s.c_str();
-    glUniform3fv(glGetUniformLocation(shader->ID, csc), 1, glm::value_ptr(this->pointLights[index].color));
-
-    s = "pointLights[" + std::to_string(index) + "].isActive";
-    const char* csa = s.c_str();
-    glUniform1i(glGetUniformLocation(shader->ID, csa), this->pointLights[index].isActive);
-
-    s = "pointLights[" + std::to_string(index) + "].intensity";
-    const char* csi = s.c_str();
-    glUniform1f(glGetUniformLocation(shader->ID, csi), this->pointLights[index].intensity);
-
-    s = "pointLights[" + std::to_string(index) + "].range";
-    const char* csr = s.c_str();
-    glUniform1f(glGetUniformLocation(shader->ID, csr), this->pointLights[index].range);
-
-    s = "pointLights[" + std::to_string(index) + "].castShadows";
-    const char* css = s.c_str();
-    glUniform1f(glGetUniformLocation(shader->ID, css), this->pointLights[index].castShadows);
 }
 
 void Renderer::SendDirLightUniforms()

@@ -46,15 +46,16 @@ namespace ShaderSources
     #version 450 core
     layout (location = 0) out vec4 FragColor;   //COLOR_ATTACHMENT_0
 
-    struct PointLight {    
-        vec3 position;   
-        vec3 color; 
-        float intensity;
-        float range;
-        bool isActive;
-        bool castShadows;
-    };  
-    vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, 
+    struct GPUPointLight    
+    {    
+        vec4 positionRange;   
+        vec4 colorIntensity; 
+        uint isActive;
+        uint castShadows;
+        uint pad0, pad1; //48
+    };
+
+    vec3 CalcPointLight(GPUPointLight light, vec3 fragPos, vec3 viewDir, 
                 vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index);
  
     struct DirLight {
@@ -102,9 +103,7 @@ namespace ShaderSources
     
     //SHARED UNIFORMS---------------------------------------------------------------------
     //light
-    uniform PointLight pointLights[4];
     uniform int numPointLights;
-    uniform int numPointLightsPlus;
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
     //shadow
@@ -125,8 +124,8 @@ namespace ShaderSources
     //forward+
     uniform uint tileSize = 16;
     uniform uvec2 screen = uvec2(1920, 1080);
-    const int MAX_LIGHTS_PER_TILE = 128;
-
+    const int MAX_LIGHTS_PER_TILE = 1024;
+            
     //UNIQUE UNIFORMS --------------------------------------------------------------------
     //material properties (Set by SendMaterialUniforms())
     uniform Material material;
@@ -146,16 +145,6 @@ namespace ShaderSources
     float CalculateLinearFog();
 
     const float gamma = 2.2;
-
-    
-    struct GPUPointLight    
-    {    
-        vec4 positionRange;   
-        vec4 colorIntensity; 
-        uint isActive;
-        uint castShadows;
-        uint pad0, pad1; //48
-    };
 
     layout(std430, binding = 1) buffer Lights
     {
@@ -187,33 +176,20 @@ namespace ShaderSources
         uvec2 pix = uvec2(gl_FragCoord.xy);
         uvec2 tile = pix / tileSize;
         uint tileID = tile.y * uint(screen.x / 16) + tile.x;
+    
+        uint lightsInTile = counts[tileID];
 
         //LIGHTS
-        for (int i = 0; i < numPointLightsPlus; i++)
+        for (int i = 0; i < lightsInTile; i++)
         {
             uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
 
             GPUPointLight g = lights[lightIndex];
-            PointLight p;
-            p.position   = g.positionRange.xyz;
-            p.range      = g.positionRange.w;
-            p.color      = g.colorIntensity.rgb;
-            p.intensity  = g.colorIntensity.a;
-            p.isActive   = (g.isActive   != 0u);
-            p.castShadows= (g.castShadows!= 0u);
-
-            color += CalcPointLight(p, FragPos, viewDir, diffuse, normal, specular, i);
+            color += CalcPointLight(g, FragPos, viewDir, diffuse, normal, specular, i);
         }
 
         color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
 
-        /*
-        for (int i = 0; i < numPointLights; i++)
-        {
-            color += CalcPointLight(pointLights[i], FragPos, viewDir, diffuse, normal, specular, i);
-        }
-        
-        */    
         vec3 fragPosNDC = FragPosClipSpace.xyz / FragPosClipSpace.w; //perpective divide [-1,1]
         fragPosNDC = fragPosNDC * 0.5f + 0.5f; //[0,1]
         vec2 ssaoUV = fragPosNDC.xy;
@@ -323,15 +299,14 @@ namespace ShaderSources
         return clamp(shadow, 0.0f, 1.0f); 
     }
 
-    vec3 CalcPointLight(PointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index)
+    vec3 CalcPointLight(GPUPointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular, int index)
     {
-    
-        if (light.isActive == false)
+        if (light.isActive == 0u)
         {
             return vec3(0.0f, 0.0f, 0.0f);
         }
         
-        vec3 lightDir = normalize(light.position - fragPos);
+        vec3 lightDir = normalize(light.positionRange.xyz - fragPos);
 
         // diffuse shading
         float diff = max(dot(normal, lightDir), 0.0);
@@ -342,26 +317,27 @@ namespace ShaderSources
         spec = pow(max(dot(halfwayDir, normal), 0.0), 64.0f);
             
         // attenuation 
-        float distance    = length(light.position - fragPos);
-        float maxDistance = (farPlane / 7.5f) * (light.range / 100.0f); //0: no light, 100: max reach
-        if (maxDistance <= 0.0f) return vec3(0.0f);
+        float distance    = length(light.positionRange.xyz - fragPos);
+        float maxDistance = light.positionRange.w;
+
+        if (distance > maxDistance) return vec3(0.0f);
         
-        float t = clamp(1.0f - (distance / maxDistance), 0.0f, 1.0f);
+        float t = 1.0f - (distance / maxDistance);
         float attenuation = t * t; //quadratic attenuation
         // combine results
-        vec3 diffuse  = light.intensity * light.color  * diff * diffuseColor;
-        vec3 specular = light.intensity * light.color  * spec * baseSpecular;
+        vec3 diffuse  = light.colorIntensity.w * light.colorIntensity.rgb  * diff * diffuseColor;
+        vec3 specular = light.colorIntensity.w * light.colorIntensity.rgb  * spec * baseSpecular;
 
         diffuse  *= attenuation;
         specular *= attenuation;
         
-        if (!light.castShadows)
+        if (light.castShadows == 0u)
         {
             return (diffuse + specular);
         }
         else
         {
-            float shadow = PointShadowCalculation(fragPos, light.position, normal, index);
+            float shadow = PointShadowCalculation(fragPos, light.positionRange.xyz, normal, index);
             return shadow * (diffuse + specular);
         }
     } 
@@ -1536,9 +1512,9 @@ namespace ShaderSources
         vec4 colorIntensity; 
         uint isActive;
         uint castShadows;
-        uint pad0, pad1; //48
+        uint pad0, pad1; //48 
     };    
-
+    
     layout(std430, binding = 1) buffer Lights
     {
         GPUPointLight lights[];  
@@ -1560,29 +1536,32 @@ namespace ShaderSources
     uniform mat4 projection;
     uniform vec2 screen; //w , h
 
-    const uint MAX_LIGHTS_PER_TILE = 128;
+    const uint MAX_LIGHTS_PER_TILE = 1024;
+    const float tileSize = 16.0f;
     uniform int numLights;
 
     void main()
     {
         uvec2 tileCoords = gl_WorkGroupID.xy;
-        if (tileCoords.x >= uint(screen.x)/16 || tileCoords.y >= uint(screen.y)/16 )
+        uvec2 groupCount = uvec2( (screen + tileSize - 1u) / tileSize );
+
+        if (tileCoords.x >= groupCount.x || tileCoords.y >= groupCount.y)
         {
             return;
         }
 
-        uint tileID = tileCoords.y * uint(screen.x / 16) + tileCoords.x;
+        uint tileID = tileCoords.y * groupCount.x + tileCoords.x;
         uint base = tileID * MAX_LIGHTS_PER_TILE;
 
-        if (gl_LocalInvocationIndex == 0) counts[tileID] = 0;
+        if (gl_LocalInvocationIndex == 0) counts[tileID] = 0u;
         memoryBarrierBuffer();
         barrier();
 
         //corners
-        vec2 px0 = vec2(tileCoords) * 16.0f;
-        vec2 px1 = px0 + 16.0f;
+        vec2 pxMin = vec2(tileCoords) * tileSize;
+        vec2 pxMax = pxMin + tileSize;
         
-        for (uint i = gl_LocalInvocationIndex; i < numLights; i += 256)
+        for (uint i = gl_LocalInvocationIndex; i < uint(numLights); i += 256u)
         {
             GPUPointLight l = lights[i];
             if (l.isActive == 0u) continue;
@@ -1590,16 +1569,16 @@ namespace ShaderSources
             vec4 viewPos = view * vec4(l.positionRange.xyz, 1.0f);
             float z = -viewPos.z;
 
-            float radius = (farPlane / 7.5f) * (l.positionRange.w / 100.0f);
+            float radius = l.positionRange.w;
             float radiusScreenSpace = (radius / z) * projection[1][1] * screen.y * 0.5;
             
             vec4 clip = projection * viewPos;
             vec2 ndc = clip.xy / clip.w;
             vec2 center = (ndc * 0.5f + 0.5f) * screen;
             
-            vec2 closest = clamp(center, px0, px1);
-            float d2 = distance(center, closest);
-            bool inside = d2 < radiusScreenSpace * 8;
+            vec2 closest = clamp(center, pxMin, pxMax);
+            float d2 = dot(center - closest, center - closest);
+            bool inside = d2 <= radiusScreenSpace * radiusScreenSpace;
 
             if (inside)
             {
@@ -1610,6 +1589,16 @@ namespace ShaderSources
                 }        
             }
         }
+
+        memoryBarrierBuffer(); 
+        barrier();
+
+        if (gl_LocalInvocationID == 0u)
+        {
+            counts[tileID] = min(counts[tileID], MAX_LIGHTS_PER_TILE);
+        }
+
+        
     }
     )";
 

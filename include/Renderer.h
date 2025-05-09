@@ -17,24 +17,14 @@ class Renderer
 {
 public:
     //TEMP
-    struct PointLightGPU
-    {
-        glm::vec4 positionRange;
-        glm::vec4 colorIntensity;  
-        uint32_t  isActive;
-        uint32_t  castShadows;
-        uint32_t  pad0, pad1;
-    };
-    unsigned int lightSSBO, indexSSBO, countSSBO;
-    ComputeShader* tileCullShader;
-    PointLightGPU pointLightsForward[MAX_POINT_LIGHTS_PLUS];
-    unsigned int currentFramePointLightCountPlus;
+    
     Camera* cam;
 
     
     //Construction
 	Renderer();
 	~Renderer();
+    
     
     //Begin/End frame
     void BeginRenderFrame();
@@ -78,7 +68,6 @@ public:
 private:
     //CONSTRUCTOR 
     void InitializeShaders();
-    void InitializePointLights();
     void InitializeDirLight();
     void SetupVertexBuffers();
     void SetupFramebuffers();
@@ -142,25 +131,18 @@ private:
     float bloomThreshold;
     void SetAndSendAllLightsToFalse();
     //point
-    struct PointLight
+    struct PointLightGPU
     {
-        glm::vec3 position;
-        glm::vec3 color;
-        float range;
-        float intensity;
-        bool isActive;
-        bool castShadows;
-
-        PointLight()
-            : position(0.0f), color(1.0f), range(2.0f), intensity(1.0f), isActive(false), castShadows(false) {}
-
-        PointLight(const glm::vec3& pos, const glm::vec3& col, float range, float intensity, bool active, bool shadow)
-            : position(pos), color(col), range(range), intensity(intensity), isActive(active), castShadows(shadow) {}
+        glm::vec4 positionRange;
+        glm::vec4 colorIntensity;
+        uint32_t  isActive;
+        uint32_t  castShadows;
+        uint32_t  pad0, pad1;
     };
-    PointLight pointLights[MAX_POINT_LIGHTS];
-    
-    unsigned int currentFramePointLightCount;
-    void SendPointLightUniforms(Shader* shader, unsigned int index);
+    unsigned int lightSSBO, indexSSBO, countSSBO;
+    ComputeShader* tileCullShader;
+    PointLightGPU pointLightsForward[MAX_POINT_LIGHTS_PLUS];
+    unsigned int currentFramePointLightCountPlus;
     float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
 
     //directional
