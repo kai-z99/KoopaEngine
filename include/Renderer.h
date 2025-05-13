@@ -136,13 +136,14 @@ private:
         glm::vec4 positionRange;
         glm::vec4 colorIntensity;
         uint32_t  isActive;
-        uint32_t  castShadows;
+        int32_t  shadowMapIndex;
         uint32_t  pad0, pad1;
     };
     unsigned int lightSSBO, indexSSBO, countSSBO;
     ComputeShader* tileCullShader;
-    PointLightGPU pointLightsForward[MAX_POINT_LIGHTS_PLUS];
-    unsigned int currentFramePointLightCountPlus;
+    PointLightGPU pointLights[MAX_POINT_LIGHTS];
+    unsigned int currentFramePointLightCount;
+    unsigned int currentFrameShadowArrayIndex;
     float SHADOW_PROJECTION_FAR = 25.0f, SHADOW_PROJECTION_NEAR = 0.1f;
 
     //directional

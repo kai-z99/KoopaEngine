@@ -71,10 +71,10 @@ constexpr unsigned int SCREEN_WIDTH = 1920;
 constexpr unsigned int SCREEN_HEIGHT = 1080;
 
 //max amount of point lights allowed
-constexpr unsigned int MAX_POINT_LIGHTS = 4;
-constexpr unsigned int MAX_POINT_LIGHTS_PLUS = 1024;
-constexpr unsigned int MAX_LIGHTS_PER_TILE = 1024;
+constexpr unsigned int MAX_POINT_LIGHTS = 1024;
+constexpr unsigned int MAX_LIGHTS_PER_TILE = 256;
 constexpr unsigned int TILE_SIZE = 16;
+constexpr unsigned int MAX_SHADOW_CASTING_POINT_LIGHTS = 4;
 
 //camera
 constexpr float DEFAULT_EXPOSURE = 0.5f;

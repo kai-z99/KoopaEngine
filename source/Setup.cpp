@@ -711,7 +711,7 @@ namespace FramebufferSetup
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
 
         //set texture params
-        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
+        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_SHADOW_CASTING_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -874,7 +874,7 @@ namespace TextureSetup
         glGenTextures(1, &textureArray);
         glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, textureArray);
 
-        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
+        glTexImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, 0, GL_RG32F, w, h, MAX_SHADOW_CASTING_POINT_LIGHTS * 6, 0, GL_RG, GL_FLOAT, NULL);
 
         //filtering
         glTexParameteri(GL_TEXTURE_CUBE_MAP_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
