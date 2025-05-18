@@ -123,6 +123,11 @@ void KoopaEngine::SetCurrentBaseSpecular(float specular)
     this->renderer->SetBaseSpecular(specular);
 }
 
+void KoopaEngine::SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao)
+{
+    this->renderer->SetCurrentPBRMaterial(albedo, normal, metallic, roughness, ao);
+}
+
 void KoopaEngine::SetFogColor(Vec3 col)
 {
     this->renderer->SetFogColor(col);

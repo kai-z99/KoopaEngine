@@ -14,6 +14,7 @@ class DrawCall
 {
 public:
 	DrawCall(MeshData meshData, Material material, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
+	DrawCall(MeshData meshData, PBRMaterial pbrmaterial, const glm::mat4& model, GLenum primitive = GL_TRIANGLES);
 
 	//Draw
 	void Render(Shader* shader, bool tempDontCull = false);
@@ -21,6 +22,7 @@ public:
 
 	//For "fs1" lighting shader
 	void BindMaterialUniforms(Shader* shader);
+	void BindPBRMaterialUniforms(Shader* shader);
 
 	void SetLODMesh(MeshData meshData);
 
@@ -43,6 +45,7 @@ private:
 
 	//Material
 	Material material;
+	PBRMaterial pbrmaterial;
 
 	//for terrain
 	const char* heightMapPath;

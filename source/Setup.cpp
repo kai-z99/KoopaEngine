@@ -176,78 +176,58 @@ namespace VertexBufferSetup
 
         std::vector<float> vertices;
 
-        // Each vertex will have: 3 (position) + 3 (normal) + 2 (texCoord) + 3 (tangent) = 11 floats.
-        // Loop over each quad on the sphere’s surface and compute two triangles per quad.
+        const float TILE_U = 2.0f;   
+        const float TILE_V = 2.0f;   
+
         for (unsigned int y = 0; y < SPHERE_Y_SEGMENTS; ++y)
         {
             for (unsigned int x = 0; x < SPHERE_X_SEGMENTS; ++x)
             {
-                // Compute normalized texture coordinates for the current quad corners.
-                float u0 = (float)x / SPHERE_X_SEGMENTS;
-                float u1 = (float)(x + 1) / SPHERE_X_SEGMENTS;
-                float v0 = (float)y / SPHERE_Y_SEGMENTS;
-                float v1 = (float)(y + 1) / SPHERE_Y_SEGMENTS;
 
-                // Compute positions for the four corners of the quad.
-                float x0 = std::cos(u0 * 2.0f * PI) * std::sin(v0 * PI);
-                float y0 = std::cos(v0 * PI);
-                float z0 = std::sin(u0 * 2.0f * PI) * std::sin(v0 * PI);
+                float uAngle0 = (float)x / SPHERE_X_SEGMENTS;
+                float uAngle1 = (float)(x + 1) / SPHERE_X_SEGMENTS;
+                float vAngle0 = (float)y / SPHERE_Y_SEGMENTS;
+                float vAngle1 = (float)(y + 1) / SPHERE_Y_SEGMENTS;
 
-                float x1 = std::cos(u1 * 2.0f * PI) * std::sin(v0 * PI);
-                float y1 = std::cos(v0 * PI);
-                float z1 = std::sin(u1 * 2.0f * PI) * std::sin(v0 * PI);
+                float u0 = uAngle0 * TILE_U;
+                float u1 = uAngle1 * TILE_U;
+                float v0 = vAngle0 * TILE_V;
+                float v1 = vAngle1 * TILE_V;
 
-                float x2 = std::cos(u0 * 2.0f * PI) * std::sin(v1 * PI);
-                float y2 = std::cos(v1 * PI);
-                float z2 = std::sin(u0 * 2.0f * PI) * std::sin(v1 * PI);
-                
-                float x3 = std::cos(u1 * 2.0f * PI) * std::sin(v1 * PI);
-                float y3 = std::cos(v1 * PI);
-                float z3 = std::sin(u1 * 2.0f * PI) * std::sin(v1 * PI);
-
-                // Lambda to add a vertex's data to our vector.
-                auto addVertex = [&](float posX, float posY, float posZ, float u, float v) {
-                    // Position
-                    vertices.push_back(posX);
-                    vertices.push_back(posY);
-                    vertices.push_back(posZ);
-                    // Normal (same as position for a unit sphere)
-                    vertices.push_back(posX);
-                    vertices.push_back(posY);
-                    vertices.push_back(posZ);
-                    // Texture coordinates
-                    vertices.push_back(u);
-                    vertices.push_back(v);
-                    // Tangent: derivative with respect to u (ignoring the v-dependent factor)
-                    float tanX = -std::sin(u * 2.0f * PI);
-                    float tanY = 0.0f;
-                    float tanZ = std::cos(u * 2.0f * PI);
-                    // Normalize tangent
-                    float length = std::sqrt(tanX * tanX + tanY * tanY + tanZ * tanZ);
-                    if (length > 0.0f)
-                    {
-                        tanX /= length;
-                        tanY /= length;
-                        tanZ /= length;
-                    }
-                    vertices.push_back(tanX);
-                    vertices.push_back(tanY);
-                    vertices.push_back(tanZ);
+ 
+                auto evalPos = [](float u, float v) {
+                    float theta = u * 2.0f * PI;
+                    float phi = v * PI;
+                    return glm::vec3(cos(theta) * sin(phi),
+                        cos(phi),
+                        sin(theta) * sin(phi));
                     };
 
-                // Instead of v0, v2, v1 => do v0, v1, v2
-                addVertex(x0, y0, z0, u0, v0); // v0
-                addVertex(x1, y1, z1, u1, v0); // v1
-                addVertex(x2, y2, z2, u0, v1); // v2
+                glm::vec3 p0 = evalPos(uAngle0, vAngle0);
+                glm::vec3 p1 = evalPos(uAngle1, vAngle0);
+                glm::vec3 p2 = evalPos(uAngle0, vAngle1);
+                glm::vec3 p3 = evalPos(uAngle1, vAngle1);
 
-                // Instead of v1, v2, v3 => do v1, v3, v2
-                addVertex(x1, y1, z1, u1, v0); // v1
-                addVertex(x3, y3, z3, u1, v1); // v3
-                addVertex(x2, y2, z2, u0, v1); // v2
+
+                auto addVertex = [&](const glm::vec3& pos, float u, float v)
+                    {
+                        vertices.insert(vertices.end(),
+                            { pos.x, pos.y, pos.z,       
+                              pos.x, pos.y, pos.z,            
+                              u, v,                           
+                              -sin(u * 2 * PI), 0.0f, cos(u * 2 * PI) }); 
+                    };
+
+                addVertex(p0, u0, v0);
+                addVertex(p1, u1, v0);
+                addVertex(p2, u0, v1);
+
+                addVertex(p1, u1, v0);
+                addVertex(p3, u1, v1);
+                addVertex(p2, u0, v1);
             }
         }
 
-        // Create and bind VAO and VBO, then upload vertex data.
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
 
@@ -932,8 +912,8 @@ namespace TextureSetup
 
             if (format == GL_RGBA)
             {
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
             }
             else
             {

@@ -17,10 +17,10 @@ class Renderer
 {
 public:
     //TEMP
-    
+    bool usingPBR = true;
+
     Camera* cam;
 
-    
     //Construction
 	Renderer();
 	~Renderer();
@@ -55,6 +55,7 @@ public:
     void SetCurrentBaseColor(Vec3 col);
     void SetCurrentNormal(const char* path);
     void SetCurrentSpecular(const char* path);
+    void SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao);
     void SetBaseSpecular(float spec);
     void SetSkybox(const std::vector<const char*>& faces);
     void SetExposure(float exposure);
@@ -109,6 +110,7 @@ private:
 
     //MATERIAL
     Material currentMaterial;
+    PBRMaterial currentPBRMaterial;
     std::unordered_map<const char*, unsigned int> textureToID;
     void AddToTextureMap(const char* path); //stores texture to map if its not already there
 

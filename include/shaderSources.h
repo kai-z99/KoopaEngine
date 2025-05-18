@@ -115,7 +115,7 @@ namespace ShaderSources
     
     //SHARED UNIFORMS---------------------------------------------------------------------
     //light
-    uniform bool usingPBR = false;
+    uniform bool usingPBR;
     uniform int numPointLights;
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
@@ -196,7 +196,7 @@ namespace ShaderSources
         //LIGHTS
         if (!usingPBR)
         {
-            for (int i = 0; i < lightsInTile; i++)
+            for (uint i = 0u; i < lightsInTile; i++)
             {
                 uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
 
@@ -227,7 +227,7 @@ namespace ShaderSources
             //roughness = max(roughness, 0.04); //avoid sparkling
             float ao = texture(PBRmaterial.ao, TexCoords).r;
 
-            for (int i = 0; i < lightsInTile; i++)
+            for (uint i = 0u; i < lightsInTile; i++)
             {
                 uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
 
@@ -246,7 +246,7 @@ namespace ShaderSources
             color = mix(fogColor, color, fogFactor);
         }
 
-        if (hasAlpha && !usingPBR) FragColor = FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
+        if (hasAlpha && !usingPBR) FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
         else FragColor = vec4(color, 1.0f);
     }
 
@@ -542,8 +542,13 @@ namespace ShaderSources
         float distance = length(light.positionRange.xyz - fragPos);
         float maxDistance = light.positionRange.w;
         if (distance > maxDistance) return vec3(0.0f);
-        float t = 1.0f - (distance / maxDistance);
-        float attenuation = t * t; //quadratic attenuation
+
+        float t = clamp(1.0f - pow(distance / maxDistance, 4), 0, 1);
+        float falloffNum = t * t;
+        float d2 = distance * distance;
+        float falloffDenom = d2 + 1;
+
+        float attenuation = falloffNum / falloffDenom;
 
         vec3 radiance = light.colorIntensity.rgb * light.colorIntensity.w * attenuation;
         vec3 fLambert = albedo / PI;

@@ -65,6 +65,15 @@ struct Material
     bool useSpecularMap;
 };
 
+struct PBRMaterial
+{
+    unsigned int albedo;
+    unsigned int normal;
+    unsigned int metallic;
+    unsigned int roughness;
+    unsigned int ao;
+};
+
 constexpr float PI = 3.14159265359f;
 
 constexpr unsigned int SCREEN_WIDTH = 1920;

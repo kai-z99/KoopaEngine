@@ -123,9 +123,23 @@ void Renderer::InitializeShaders()
     this->lightingShader = new Shader(ShaderSources::vs1, ShaderSources::fs1);
     this->lightingShader->use();
     //ASSOCIATE TEXTURES----
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.diffuse"), 0);      //GL_TEXTURE0
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.normal"), 1);       //GL_TEXTURE1
-    glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.specular"), 2);     //GL_TEXTURE2
+    if (!usingPBR)
+    {
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "usingPBR"), 0);             
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.diffuse"), 0);      //GL_TEXTURE0
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.normal"), 1);       //GL_TEXTURE1
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "material.specular"), 2);     //GL_TEXTURE2
+    }
+    else
+    {
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "usingPBR"), 1);
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.albedo"), 0);      //GL_TEXTURE0
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.normal"), 1);       //GL_TEXTURE1
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.metallic"), 2);     //GL_TEXTURE2
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.roughness"), 5);     //GL_TEXTURE5
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.ao"), 6);           //GL_TEXTURE6
+    }
+    
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "cascadeShadowMaps"), 4);
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "ssao"), 10);                
@@ -393,7 +407,8 @@ void Renderer::RenderMainScene()
         if (d->GetHeightMapPath() == nullptr) //not drawing terrain
         {
             this->lightingShader->use();
-            d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
+            if (!this->usingPBR) d->BindMaterialUniforms(this->lightingShader); //set the material unique to each draw call
+            else d->BindPBRMaterialUniforms(this->lightingShader);
 
             d->Render(this->lightingShader);
         }
@@ -1148,6 +1163,21 @@ void Renderer::SetCurrentSpecular(const char* path)
     this->currentMaterial.useSpecularMap = true;
 }
 
+void Renderer::SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao)
+{
+    AddToTextureMap(albedo);
+    AddToTextureMap(normal);
+    AddToTextureMap(metallic);
+    AddToTextureMap(roughness);
+    AddToTextureMap(ao);
+
+    this->currentPBRMaterial.albedo = this->textureToID[albedo];
+    this->currentPBRMaterial.normal = this->textureToID[normal];
+    this->currentPBRMaterial.metallic = this->textureToID[metallic];
+    this->currentPBRMaterial.roughness = this->textureToID[roughness];
+    this->currentPBRMaterial.ao = this->textureToID[ao];
+}
+
 void Renderer::SetBaseSpecular(float spec)
 {
     this->currentMaterial.baseSpecular = spec;
@@ -1207,26 +1237,31 @@ static glm::mat4 CreateModelMatrix(const Vec3& pos, const Vec4& rotation, const 
 void Renderer::DrawTriangle(Vec3 pos, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, {1,1,1});
-    this->drawCalls.push_back(new DrawCall(this->triangleMeshData, this->currentMaterial, model));
+
+    if (!this->usingPBR) this->drawCalls.push_back(new DrawCall(this->triangleMeshData, this->currentMaterial, model));
+    else this->drawCalls.push_back(new DrawCall(this->triangleMeshData, this->currentPBRMaterial, model));
 }
 
 void Renderer::DrawCube(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->cubeMeshData, this->currentMaterial, model));
+    if (!this->usingPBR) this->drawCalls.push_back(new DrawCall(this->cubeMeshData, this->currentMaterial, model));
+    else this->drawCalls.push_back(new DrawCall(this->cubeMeshData, this->currentPBRMaterial, model));
 }
 
 void Renderer::DrawPlane(Vec3 pos, Vec2 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, Vec3(size.x, 1.0f, size.y));
-    this->drawCalls.push_back(new DrawCall(this->planeMeshData, this->currentMaterial, model));
+    if (!this->usingPBR) this->drawCalls.push_back(new DrawCall(this->planeMeshData, this->currentMaterial, model));
+    else this->drawCalls.push_back(new DrawCall(this->planeMeshData, this->currentPBRMaterial, model));
     this->drawCalls.back()->SetCulling(false); //Cannot cull flat things like plane
 }
 
 void Renderer::DrawSphere(Vec3 pos, Vec3 size, Vec4 rotation)
 {
     glm::mat4 model = CreateModelMatrix(pos, rotation, size);
-    this->drawCalls.push_back(new DrawCall(this->sphereMeshData, this->currentMaterial, model));
+    if (!this->usingPBR) this->drawCalls.push_back(new DrawCall(this->sphereMeshData, this->currentMaterial, model));
+    else this->drawCalls.push_back(new DrawCall(this->sphereMeshData, this->currentPBRMaterial, model));
 }
 
 void Renderer::DrawModel(const char* path, bool flipTexture, Vec3 pos, Vec3 size, Vec4 rotation)

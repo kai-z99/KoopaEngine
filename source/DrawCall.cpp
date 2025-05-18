@@ -20,6 +20,24 @@ DrawCall::DrawCall(MeshData meshData, Material material, const glm::mat4& model,
     this->material = material;
 }
 
+DrawCall::DrawCall(MeshData meshData, PBRMaterial pbrmaterial, const glm::mat4& model, GLenum primitive)
+{
+    this->heightMapPath = nullptr;  //if this stays null, we are not drawing terrain.
+
+    //general data
+    this->meshData = meshData;
+
+    this->modelMatrix = model;
+    this->primitive = primitive;
+
+    //general flags
+    this->usingCulling = true;
+
+    //Material properties
+    this->pbrmaterial = pbrmaterial;
+
+}
+
 void DrawCall::Render(Shader* shader, bool tempDontCull)
 {
     shader->use();
@@ -118,6 +136,27 @@ void DrawCall::BindMaterialUniforms(Shader* shader)
         glActiveTexture(GL_TEXTURE2); //in fs1: material.specular is 2
         glBindTexture(GL_TEXTURE_2D, this->material.specular);
     }
+}
+
+void DrawCall::BindPBRMaterialUniforms(Shader* shader)
+{
+    shader->use();
+
+    glActiveTexture(GL_TEXTURE0); //pbrmaterial.albedo
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.albedo);
+
+    glActiveTexture(GL_TEXTURE1); 
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.normal);
+
+    glActiveTexture(GL_TEXTURE2); 
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.metallic);
+
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.roughness);
+
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.ao);
+
 }
 
 void DrawCall::SetLODMesh(MeshData meshData)
