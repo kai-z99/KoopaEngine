@@ -951,6 +951,7 @@ void Renderer::RenderCascadedShadowMap()
 
 void Renderer::RenderPointShadowMap(unsigned int index)
 {
+    glDisable(GL_CULL_FACE);
     this->pointShadowShader->use();
 
     //create shadow proj matrix base
@@ -1018,12 +1019,13 @@ void Renderer::RenderPointShadowMap(unsigned int index)
             //d->Render(this->pointShadowShader, true);
             d->RenderLOD(this->pointShadowShader, true);
         }
-        glCullFace(GL_BACK);       // restore
+        //glCullFace(GL_BACK);       // restore
     }
     
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     T1 = this->pointShadowMapTextureArrayRG;
+    glEnable(GL_CULL_FACE);
     this->BlurPointShadowMap(index);
 }
 

@@ -57,6 +57,9 @@ namespace ShaderSources
         
     vec3 CalcPointLight(GPUPointLight light, vec3 fragPos, vec3 viewDir, 
                 vec3 diffuseColor, vec3 normal, vec3 baseSpecular);
+
+    vec3 CalcPointLightPBR(GPUPointLight light, vec3 fragPos, vec3 viewDir, 
+                vec3 albedo, vec3 normal, float metallic, float roughness, float ao);
  
     struct DirLight {
         vec3 direction;
@@ -81,6 +84,15 @@ namespace ShaderSources
         float baseSpecular; //[0-1] hard scalar for specular
     };
 
+    struct PBRMaterial
+    {
+        sampler2D albedo;
+        sampler2D normal;
+        sampler2D metallic;
+        sampler2D roughness;
+        sampler2D ao;
+    };
+
     //IN VARIABLES--------------------------------------------------------------------------------
     in vec2 TexCoords;
     in vec3 Normal;
@@ -89,13 +101,13 @@ namespace ShaderSources
     in vec4 FragPosClipSpace;
 
     //SAMPLERS------------------------------------------------------------------------------------
-    //material.diffuse;                              //0
-    //material.normal;                               //1
-    //material.specular;                             //2
+    //material.diffuse; OR pbrmatieral.albedo        //0
+    //material.normal; OR pbrmaterial.normal         //1
+    //material.specular; OR prrmaterial.metallic     //2
     uniform samplerCubeArray pointShadowMapArray;    //3
     uniform sampler2DArray cascadeShadowMaps;        //4
-    //FREE
-    //FREE
+    //pbrmaterial.roughness                          //5
+    //pbrmaterial.ao                                 //6
     //FREE
     //FREE
     //TERRAIN TEXTURE                                //9
@@ -103,6 +115,7 @@ namespace ShaderSources
     
     //SHARED UNIFORMS---------------------------------------------------------------------
     //light
+    uniform bool usingPBR = false;
     uniform int numPointLights;
     uniform DirLight dirLight;
     uniform float sceneAmbient;                     //updated every frame in SendOtherUniforms()
@@ -133,6 +146,7 @@ namespace ShaderSources
     uniform bool usingDiffuseMap;
     uniform bool usingNormalMap;
     uniform bool usingSpecularMap;
+    uniform PBRMaterial PBRmaterial;
 
     uniform bool useSSS = false;
     uniform vec3 sssColor = vec3(0.02f, 0.42f, 0.02f);
@@ -168,7 +182,7 @@ namespace ShaderSources
         vec3 color = vec3(0.0f);
         vec3 viewDir = normalize(viewPos - FragPos);    
         
-        //Find which textures to use
+        //Find which textures to use for blinn phong
         vec3 diffuse = ChooseDiffuse();
         vec3 normal = ChooseNormal();
         vec3 specular = ChooseSpecular();
@@ -178,27 +192,53 @@ namespace ShaderSources
         uint tileID = tile.y * uint(screen.x / 16) + tile.x;
     
         uint lightsInTile = counts[tileID];
-
+        
         //LIGHTS
-        for (int i = 0; i < lightsInTile; i++)
+        if (!usingPBR)
         {
-            uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
+            for (int i = 0; i < lightsInTile; i++)
+            {
+                uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
 
-            GPUPointLight g = lights[lightIndex];
-            color += CalcPointLight(g, FragPos, viewDir, diffuse, normal, specular);
+                GPUPointLight g = lights[lightIndex];
+
+                color += CalcPointLight(g, FragPos, viewDir, diffuse, normal, specular);
+            }
+
+            color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
+
+            vec3 fragPosNDC = FragPosClipSpace.xyz / FragPosClipSpace.w; //perpective divide [-1,1]
+            fragPosNDC = fragPosNDC * 0.5f + 0.5f; //[0,1]
+            vec2 ssaoUV = fragPosNDC.xy;
+            float occlusion = texture(ssao, ssaoUV).r;
+
+            //Ambient lighting
+            vec3 sceneAmbient = vec3(sceneAmbient) * diffuse * occlusion; 
+            color += sceneAmbient;
+        }
+        else
+        {            
+            vec3 albedo = pow(texture(PBRmaterial.albedo, TexCoords).rgb, vec3(gamma)); //linear space
+            vec3 N = texture(PBRmaterial.normal, TexCoords).xyz;
+            N = N * 2.0f - 1.0f; //[0,1] -> [-1, 1]
+            N = normalize(TBN * N); //Tangent -> World (tbn is constucted with model matrix)
+            float metallic = texture(PBRmaterial.metallic, TexCoords).r;
+            float roughness = texture(PBRmaterial.roughness, TexCoords).r;
+            //roughness = max(roughness, 0.04); //avoid sparkling
+            float ao = texture(PBRmaterial.ao, TexCoords).r;
+
+            for (int i = 0; i < lightsInTile; i++)
+            {
+                uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
+
+                GPUPointLight g = lights[lightIndex];
+
+                color += CalcPointLightPBR(g, FragPos, viewDir, albedo, N, metallic, roughness, ao);
+            }
+            vec3 ambient = vec3(0.03) * albedo * ao;
+            color += ambient;
         }
 
-        color += CalcDirLight(dirLight, FragPos, viewDir, diffuse, normal, specular);
-
-        vec3 fragPosNDC = FragPosClipSpace.xyz / FragPosClipSpace.w; //perpective divide [-1,1]
-        fragPosNDC = fragPosNDC * 0.5f + 0.5f; //[0,1]
-        vec2 ssaoUV = fragPosNDC.xy;
-        float occlusion = texture(ssao, ssaoUV).r;
-
-        //Ambient lighting
-        vec3 sceneAmbient = vec3(sceneAmbient) * diffuse * occlusion; 
-        color += sceneAmbient;
-        
         //atmospheric fog
         if (fogColor != vec3(0.0f))
         {
@@ -206,10 +246,13 @@ namespace ShaderSources
             color = mix(fogColor, color, fogFactor);
         }
 
-        if (hasAlpha) FragColor = FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
+        if (hasAlpha && !usingPBR) FragColor = FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
         else FragColor = vec4(color, 1.0f);
     }
 
+    //SHADOWS
+    )"
+    R"(
     const vec3 sampleOffsetDirections[20] = vec3[]
     (
         vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
@@ -299,6 +342,9 @@ namespace ShaderSources
         return clamp(shadow, 0.0f, 1.0f); 
     }
 
+    //BLINN PHONG
+    )"
+    R"(
     vec3 CalcPointLight(GPUPointLight light, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, vec3 normal, vec3 baseSpecular)
     {
         if (light.isActive == 0u)
@@ -434,9 +480,96 @@ namespace ShaderSources
             return shadow * (diffuse + specular);
         }
     }
+
+    //PBR FUNCTIONS
     )"
     R"(
-    //Helper functions 
+
+    float DistributionGGX(vec3 N, vec3 H, float roughness)
+    {
+        const float PI = 3.14159265359;
+
+        float a      = roughness*roughness;
+        float a2     = a*a;
+        float NdotH  = max(dot(N, H), 0.0);
+        float NdotH2 = NdotH*NdotH;
+	
+        float num   = a2;
+        float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+        denom = PI * denom * denom;
+	
+        return num / denom;
+    }
+
+    float GeometrySchlickGGX(float NdotV, float roughness)
+    {
+        float r = (roughness + 1.0);
+        float k = (r*r) / 8.0;
+
+        float num   = NdotV;
+        float denom = NdotV * (1.0 - k) + k;
+	
+        return num / denom;
+    }
+
+    float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+    {
+        float NdotV = max(dot(N, V), 0.0);
+        float NdotL = max(dot(N, L), 0.0);
+        float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+        float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+	
+        return ggx1 * ggx2;
+    }
+
+    vec3 FresnelSchlick(float cosTheta, vec3 F0)
+    {
+        return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    }
+
+    vec3 CalcPointLightPBR(GPUPointLight light, vec3 fragPos, vec3 viewDir, vec3 albedo, vec3 normal, float metallic, float roughness, float ao)
+    {
+        const float PI = 3.14159265359;
+
+        //0.04 is acceptable for most materials
+        vec3 F0 = vec3(0.04);
+        F0 = mix(F0, albedo, metallic);
+
+        vec3 Lo = vec3(0.0);
+        vec3 lightDir = normalize(light.positionRange.xyz - fragPos);
+        vec3 halfway = normalize(viewDir + lightDir);
+
+        float distance = length(light.positionRange.xyz - fragPos);
+        float maxDistance = light.positionRange.w;
+        if (distance > maxDistance) return vec3(0.0f);
+        float t = 1.0f - (distance / maxDistance);
+        float attenuation = t * t; //quadratic attenuation
+
+        vec3 radiance = light.colorIntensity.rgb * light.colorIntensity.w * attenuation;
+        vec3 fLambert = albedo / PI;
+
+        //cook-torrence BRDF
+        float NDF = DistributionGGX(normal, halfway, roughness);
+        float G = GeometrySmith(normal, viewDir, lightDir, roughness);
+        vec3 F = FresnelSchlick(max(dot(halfway, viewDir), 0.0f), F0);
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(viewDir, normal), 0.0) * max(dot(lightDir, normal), 0.0) + 0.00001;
+        vec3 fCookTorrence = numerator / denominator;
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0f) - kS;
+        kD *= 1.0f - metallic;
+
+        float NdotL = max(dot(normal, lightDir),0.0f);
+        Lo += (kD * fLambert + fCookTorrence) * radiance * NdotL;
+
+        return Lo;
+    }
+
+    //HELPERS
+    )"
+    R"(
+    
     vec3 ChooseDiffuse()
     {
 
