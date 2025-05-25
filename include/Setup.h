@@ -31,6 +31,7 @@ namespace FramebufferSetup
     void SetupGBufferFramebuffer(unsigned int& FBO, unsigned int& gNormal, unsigned int& gPosition);
     void SetupSSAOFramebuffer(unsigned int& FBO, unsigned int& texture);
 
+    void SetupTiledSSBOs(unsigned int& lightSSBO, unsigned int& countSSBO, unsigned int& indexSSBO);
 }
 
 namespace TextureSetup

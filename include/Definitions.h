@@ -39,6 +39,17 @@ struct AABB
     }
 };
 
+/*
+struct PointLightGPU
+{
+    glm::vec4 positionRange;
+    glm::vec4 colorIntensity;
+    uint32_t  isActive;
+    int32_t  shadowMapIndex;
+    uint32_t  pad0, pad1;
+};
+*/
+
 struct MeshData
 {
     unsigned int VAO;

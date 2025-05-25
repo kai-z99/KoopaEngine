@@ -5,6 +5,8 @@
 #include <stb_image.h>
 
 #include <iostream>
+#include "Definitions.h"
+
 
 static inline AABB GetAABB(float* vertexData, unsigned int vertexCount, unsigned int stride)
 {
@@ -807,6 +809,47 @@ namespace FramebufferSetup
 
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    static struct PointLightGPU
+    {
+        glm::vec4 positionRange;
+        glm::vec4 colorIntensity;
+        uint32_t  isActive;
+        int32_t  shadowMapIndex;
+        uint32_t  pad0, pad1;
+    };
+
+    void SetupTiledSSBOs(unsigned int& lightSSBO, unsigned int& countSSBO, unsigned int& indexSSBO)
+    {
+
+        uint32_t nx = (SCREEN_WIDTH + TILE_SIZE - 1) / TILE_SIZE;
+        uint32_t ny = (SCREEN_HEIGHT + TILE_SIZE - 1) / TILE_SIZE;
+        uint32_t nTiles = nx * ny;
+
+        //TEMP
+        glCreateBuffers(1, &lightSSBO);
+        glCreateBuffers(1, &indexSSBO);
+        glCreateBuffers(1, &countSSBO);
+
+        //lights
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PointLightGPU) * MAX_POINT_LIGHTS, NULL, GL_DYNAMIC_COPY);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, lightSSBO); //binding = 1
+
+        //indexSSBO
+        size_t indexBufBytes = nTiles * MAX_LIGHTS_PER_TILE * sizeof(GLuint);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, indexSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, indexBufBytes, nullptr, GL_DYNAMIC_COPY);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indexSSBO);
+
+        //count
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, countSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, nTiles * sizeof(GLuint), nullptr, GL_DYNAMIC_COPY);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, countSSBO);
+
+        static_assert(sizeof(PointLightGPU) % 16 == 0, "std430 alignment");
+
     }
 
     void SetupGBufferFramebuffer(unsigned int& FBO, unsigned int& gNormal, unsigned int& gPosition)

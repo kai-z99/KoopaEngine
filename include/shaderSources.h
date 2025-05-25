@@ -108,7 +108,7 @@ namespace ShaderSources
     uniform sampler2DArray cascadeShadowMaps;        //4
     //pbrmaterial.roughness                          //5
     //pbrmaterial.ao                                 //6
-    //FREE
+    uniform samplerCube irradianceMap;               //7
     //FREE
     //TERRAIN TEXTURE                                //9
     uniform sampler2D ssao;                          //10
@@ -159,6 +159,11 @@ namespace ShaderSources
     float CalculateLinearFog();
 
     const float gamma = 2.2;
+
+    vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+    {
+        return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    } 
 
     layout(std430, binding = 1) buffer Lights
     {
@@ -226,7 +231,8 @@ namespace ShaderSources
             float roughness = texture(PBRmaterial.roughness, TexCoords).r;
             //roughness = max(roughness, 0.04); //avoid sparkling
             float ao = texture(PBRmaterial.ao, TexCoords).r;
-
+            
+            //Calculate Lo = full integral for each point light (both spec and scatter components)
             for (uint i = 0u; i < lightsInTile; i++)
             {
                 uint lightIndex = indices[tileID * MAX_LIGHTS_PER_TILE + i];
@@ -235,7 +241,24 @@ namespace ShaderSources
 
                 color += CalcPointLightPBR(g, FragPos, viewDir, albedo, N, metallic, roughness, ao);
             }
-            vec3 ambient = vec3(0.03) * albedo * ao;
+            
+            
+            //IBL INDIRECT AMBIENT LIGHTING 
+            vec3 F0 = vec3(0.04); 
+            F0 = mix(F0, albedo, metallic);
+            vec3 F = fresnelSchlickRoughness(max(dot(N, viewDir), 0.0), F0, roughness);
+            vec3 kS = F;
+            vec3 kD = 1.0 - kS;
+            kD *= 1.0 - metallic;	
+
+            //Calculate IBL diffuse part of integral
+            vec3 irradiance = texture(irradianceMap, N).rgb; //integral part DIVIDED BY PI
+            vec3 diffuseIntegral = kD * albedo * irradiance; //kd * flambert * integral //diffuse integral solved
+            //Calculate IBL specular part of integral
+            //vec3 specular = ...;
+            
+            //vec3 ambient = (diffuseIntegral + specular) * ao; //put the integral together and times by an ao term...
+            vec3 ambient = (diffuseIntegral) * ao;
             color += ambient;
         }
 
@@ -516,8 +539,8 @@ namespace ShaderSources
     {
         float NdotV = max(dot(N, V), 0.0);
         float NdotL = max(dot(N, L), 0.0);
-        float ggx2  = GeometrySchlickGGX(NdotV, roughness);
-        float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+        float ggx2  = GeometrySchlickGGX(NdotV, roughness); //geometry obstruction
+        float ggx1  = GeometrySchlickGGX(NdotL, roughness); //geometry shadowing
 	
         return ggx1 * ggx2;
     }
@@ -533,7 +556,7 @@ namespace ShaderSources
 
         //0.04 is acceptable for most materials
         vec3 F0 = vec3(0.04);
-        F0 = mix(F0, albedo, metallic);
+        F0 = mix(F0, albedo, metallic); //albedo stores scatter color of dialectrics, base reflectivity metals. (2 pipelines)
 
         vec3 Lo = vec3(0.0);
         vec3 lightDir = normalize(light.positionRange.xyz - fragPos);
@@ -543,11 +566,11 @@ namespace ShaderSources
         float maxDistance = light.positionRange.w;
         if (distance > maxDistance) return vec3(0.0f);
 
+        //falloff based on UE4's implementation
         float t = clamp(1.0f - pow(distance / maxDistance, 4), 0, 1);
         float falloffNum = t * t;
         float d2 = distance * distance;
         float falloffDenom = d2 + 1;
-
         float attenuation = falloffNum / falloffDenom;
 
         vec3 radiance = light.colorIntensity.rgb * light.colorIntensity.w * attenuation;
@@ -563,11 +586,11 @@ namespace ShaderSources
 
         vec3 kS = F;
         vec3 kD = vec3(1.0f) - kS;
-        kD *= 1.0f - metallic;
+        kD *= 1.0f - metallic; //kd theoretically either exists or is 0. (binary metal values)
 
         float NdotL = max(dot(normal, lightDir),0.0f);
         Lo += (kD * fLambert + fCookTorrence) * radiance * NdotL;
-
+        
         return Lo;
     }
 
@@ -673,6 +696,92 @@ namespace ShaderSources
         return fogFactor;
     }
     )";
+
+    
+    const char* vsCube = R"(
+    #version 450 core
+    layout (location = 0) in vec3 aPos;
+    
+    out vec3 WorldPos;
+
+    uniform mat4 projection;
+    uniform mat4 view;
+    
+    void main()
+    {
+        WorldPos = aPos;
+        gl_Position = projection * view * vec4(aPos, 1.0f);
+    }    
+
+
+    )";
+
+    const char* fsEquirectangularToCubemap = R"(
+    #version 450 core
+    out vec4 FragColor;
+    in vec3 WorldPos;
+
+    uniform sampler2D equirectangularMap;
+
+    const vec2 invAtan = vec2(0.1591, 0.3183);
+    vec2 SampleSphericalMap(vec3 v)
+    {
+        vec2 uv = vec2(atan(v.z, v.x), asin(v.y));
+        uv *= invAtan;
+        uv += 0.5;
+        return uv;
+    }
+
+    void main()
+    {		
+        vec2 uv = SampleSphericalMap(normalize(WorldPos));
+        vec3 color = texture(equirectangularMap, uv).rgb;
+    
+        FragColor = vec4(color, 1.0);
+    }
+    )";
+
+    const char* fsIrradiance = R"(
+    #version 450 core
+    out vec4 FragColor;
+    in vec3 WorldPos;
+
+    uniform samplerCube environmentMap;
+
+    const float PI = 3.14159265359;
+
+    void main()
+    {		
+        vec3 N = normalize(WorldPos);
+
+        vec3 irradiance = vec3(0.0);   
+    
+        // tangent space calculation from origin point
+        vec3 up    = vec3(0.0, 1.0, 0.0);
+        vec3 right = normalize(cross(up, N));
+        up         = normalize(cross(N, right));
+       
+        float sampleDelta = 0.025;
+        float nrSamples = 0.0;
+        for(float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
+        {
+            for(float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
+            {
+                // spherical to cartesian (in tangent space)
+                vec3 tangentSample = vec3(sin(theta) * cos(phi),  sin(theta) * sin(phi), cos(theta));
+                // tangent space to world
+                vec3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * N; 
+
+                irradiance += texture(environmentMap, sampleVec).rgb * cos(theta) * sin(theta);
+                nrSamples++;
+            }
+        }
+        irradiance = PI * irradiance * (1.0 / float(nrSamples));
+    
+        FragColor = vec4(irradiance, 1.0);
+    }
+    )";
+
 
     const char* fsLight = R"(
     #version 450 core

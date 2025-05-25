@@ -19,6 +19,10 @@ public:
     //TEMP
     bool usingPBR = true;
 
+    unsigned int environmentCubemap;
+    unsigned int irradianceMap;
+
+
     Camera* cam;
 
     //Construction
@@ -101,6 +105,8 @@ private:
     Shader* ssaoShader;
     Shader* ssaoBlurShader;
     Shader* particleShader;
+    Shader* equiToCubeShader;
+    Shader* irradianceShader;
     ComputeShader* c;
     ComputeShader* particleUpdateComputeShader;
 

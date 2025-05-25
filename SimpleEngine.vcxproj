@@ -177,6 +177,7 @@
     <ClInclude Include="KoopaEngine.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Definitions.cpp" />
     <ClCompile Include="glad\glad.c" />
     <ClCompile Include="source\Constants.cpp" />
     <ClCompile Include="source\DrawCall.cpp" />

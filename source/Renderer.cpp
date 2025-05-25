@@ -63,7 +63,7 @@ Renderer::Renderer()
     this->currentFramePointLightCount = 0;
     this->currentFrameShadowArrayIndex = 0;
 
-    //Since these texture units are exclusivley for these shadowmaps and wont change, we can just set them once
+    //Since these texture units are exclusivley for these wont change, we can just set them once
     //here in the constructor.
     //point
     glActiveTexture(GL_TEXTURE3);
@@ -83,34 +83,135 @@ Renderer::Renderer()
     printf("OpenGL version: %d.%d\n", major, minor);
     printf("%s\n", glGetString(GL_VERSION));
 
+    //IBL setup
+    unsigned int captureFBO;
+    unsigned int captureRBO;
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+
+    // pbr: load the HDR environment map
+    // ---------------------------------
+    stbi_set_flip_vertically_on_load(true);
+    int width, height, nrComponents;
+    float* data = stbi_loadf("../ShareLib/Resources/irradiance_room.hdr", &width, &height, &nrComponents, 0);
+    unsigned int hdrTexture;
+    if (data)
+    {
+        glGenTextures(1, &hdrTexture);
+        glBindTexture(GL_TEXTURE_2D, hdrTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data); // note how we specify the texture's data value to be float
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Failed to load HDR image." << std::endl;
+    }
+    stbi_set_flip_vertically_on_load(false);
+
+    // pbr: setup cubemap to render to and attach to framebuffer
+    // ---------------------------------------------------------
+    glGenTextures(1, &this->environmentCubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->environmentCubemap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 512, 512, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // pbr: set up projection and view matrices for capturing data onto the 6 cubemap face directions
+    // ----------------------------------------------------------------------------------------------
+    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+    glm::mat4 captureViews[] =
+    {
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
+    };
+
+    // pbr: convert HDR equirectangular environment map to cubemap equivalent
+    // ----------------------------------------------------------------------
+    this->equiToCubeShader->use();
+    this->equiToCubeShader->setInt("equirectangularMap", 0);
+    glUniformMatrix4fv(glGetUniformLocation(this->equiToCubeShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(captureProjection));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, hdrTexture);
+
+    glViewport(0, 0, 512, 512); // don't forget to configure the viewport to the capture dimensions.
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glUniformMatrix4fv(glGetUniformLocation(this->equiToCubeShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(captureViews[i]));
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, this->environmentCubemap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glBindVertexArray(this->skyboxMeshData.VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
-    uint32_t nx = (SCREEN_WIDTH + TILE_SIZE - 1) / TILE_SIZE;
-    uint32_t ny = (SCREEN_HEIGHT + TILE_SIZE - 1) / TILE_SIZE;
-    uint32_t nTiles = nx * ny;
+    // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
+    // --------------------------------------------------------------------------------
+    glGenTextures(1, &this->irradianceMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->irradianceMap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 32, 32, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    //TEMP
-    glCreateBuffers(1, &lightSSBO);
-    glCreateBuffers(1, &indexSSBO);
-    glCreateBuffers(1, &countSSBO);
-                
-    //lights
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PointLightGPU) * MAX_POINT_LIGHTS, NULL, GL_DYNAMIC_COPY);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, lightSSBO); //binding = 1
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
 
-    //indexSSBO
-    size_t indexBufBytes = nTiles * MAX_LIGHTS_PER_TILE * sizeof(GLuint);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, indexSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, indexBufBytes, nullptr, GL_DYNAMIC_COPY);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indexSSBO);
+    // pbr: solve diffuse integral by convolution to create an irradiance (cube)map.
+    // -----------------------------------------------------------------------------
+    this->irradianceShader->use();
+    this->irradianceShader->setInt("environmentMap", 0);
+    glUniformMatrix4fv(glGetUniformLocation(this->irradianceShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(captureProjection));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->environmentCubemap);
 
-    //count
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, countSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, nTiles * sizeof(GLuint), nullptr, GL_DYNAMIC_COPY);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, countSSBO);
+    glViewport(0, 0, 32, 32); // don't forget to configure the viewport to the capture dimensions.
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glUniformMatrix4fv(glGetUniformLocation(this->irradianceShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(captureViews[i]));
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, this->irradianceMap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    static_assert(sizeof(PointLightGPU) % 16 == 0, "std430 alignment");  
+        glBindVertexArray(this->skyboxMeshData.VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    //ATP; this->irradianceMap is filled with the correct irradiance for every N.
+    glActiveTexture(GL_TEXTURE7); 
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->irradianceMap);
 }
 
 void Renderer::InitializeShaders()
@@ -138,6 +239,7 @@ void Renderer::InitializeShaders()
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.metallic"), 2);     //GL_TEXTURE2
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.roughness"), 5);     //GL_TEXTURE5
         glUniform1i(glGetUniformLocation(this->lightingShader->ID, "PBRmaterial.ao"), 6);           //GL_TEXTURE6
+        glUniform1i(glGetUniformLocation(this->lightingShader->ID, "irradianceMap"), 7);         //GL_TEXTURE7
     }
     
     glUniform1i(glGetUniformLocation(this->lightingShader->ID, "pointShadowMapArray"), 3);
@@ -236,6 +338,10 @@ void Renderer::InitializeShaders()
                     
     this->tileCullShader = new ComputeShader(ShaderSources::csTileCulling);
 
+    this->equiToCubeShader = new Shader(ShaderSources::vsCube, ShaderSources::fsEquirectangularToCubemap);
+
+    this->irradianceShader = new Shader(ShaderSources::vsCube, ShaderSources::fsIrradiance);
+
 }
 
 void Renderer::SetupFramebuffers()
@@ -264,6 +370,8 @@ void Renderer::SetupFramebuffers()
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoFBO, this->ssaoQuadTextureR);
     FramebufferSetup::SetupSSAOFramebuffer(this->ssaoBlurFBO, this->ssaoBlurTextureR);
     TextureSetup::SetupSSAONoiseTexture(this->ssaoNoiseTexture, this->ssaoNoise);
+
+    FramebufferSetup::SetupTiledSSBOs(this->lightSSBO, this->countSSBO, this->indexSSBO);
 
 }
 
@@ -391,6 +499,8 @@ void Renderer::RenderMainScene()
     //      binding pointshadowmaptexture is expected in renderdoc (2 tap blur) but uses OG texture in realtime.
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, this->pointShadowMapTextureArrayRG);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, this->irradianceMap);
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_DEPTH_TEST);
     //render
@@ -1187,6 +1297,8 @@ void Renderer::SetSkybox(const std::vector<const char*>& faces)
 {
     this->currentSkyboxTexture = TextureSetup::LoadTextureCubeMap(faces);
     this->usingSkybox = true;
+
+    if (usingPBR) this->currentSkyboxTexture = this->environmentCubemap;
 }
 
 void Renderer::SetExposure(float exposure)
