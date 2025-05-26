@@ -109,9 +109,10 @@ namespace ShaderSources
     //pbrmaterial.roughness                          //5
     //pbrmaterial.ao                                 //6
     uniform samplerCube irradianceMap;               //7
-    //FREE
+    uniform samplerCube prefilterMap;                //8
     //TERRAIN TEXTURE                                //9
     uniform sampler2D ssao;                          //10
+    uniform sampler2D brdfLUT;                       //11
     
     //SHARED UNIFORMS---------------------------------------------------------------------
     //light
@@ -160,7 +161,7 @@ namespace ShaderSources
 
     const float gamma = 2.2;
 
-    vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+    vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
     {
         return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
     } 
@@ -231,6 +232,7 @@ namespace ShaderSources
             float roughness = texture(PBRmaterial.roughness, TexCoords).r;
             //roughness = max(roughness, 0.04); //avoid sparkling
             float ao = texture(PBRmaterial.ao, TexCoords).r;
+            vec3 reflectionDir = reflect(-viewDir, N);
             
             //Calculate Lo = full integral for each point light (both spec and scatter components)
             for (uint i = 0u; i < lightsInTile; i++)
@@ -246,7 +248,7 @@ namespace ShaderSources
             //IBL INDIRECT AMBIENT LIGHTING 
             vec3 F0 = vec3(0.04); 
             F0 = mix(F0, albedo, metallic);
-            vec3 F = fresnelSchlickRoughness(max(dot(N, viewDir), 0.0), F0, roughness);
+            vec3 F = FresnelSchlickRoughness(max(dot(N, viewDir), 0.0), F0, roughness);
             vec3 kS = F;
             vec3 kD = 1.0 - kS;
             kD *= 1.0 - metallic;	
@@ -254,11 +256,15 @@ namespace ShaderSources
             //Calculate IBL diffuse part of integral
             vec3 irradiance = texture(irradianceMap, N).rgb; //integral part DIVIDED BY PI
             vec3 diffuseIntegral = kD * albedo * irradiance; //kd * flambert * integral //diffuse integral solved
+
             //Calculate IBL specular part of integral
-            //vec3 specular = ...;
-            
-            //vec3 ambient = (diffuseIntegral + specular) * ao; //put the integral together and times by an ao term...
-            vec3 ambient = (diffuseIntegral) * ao;
+            vec3 prefilterColor = textureLod(prefilterMap, reflectionDir, roughness * 4.0).rgb;
+            vec2 brdf = texture(brdfLUT, vec2(max(dot(N, viewDir), 0), roughness)).rg;
+            vec3 specularIntegral = prefilterColor * (F0 * brdf.x + brdf.y );
+
+            float k = 1;
+            vec3 ambient = (diffuseIntegral + specularIntegral) * ao; //put the integral together and times by an ao term...
+            //vec3 ambient = (diffuseIntegral * k) * ao;
             color += ambient;
         }
 
@@ -781,6 +787,253 @@ namespace ShaderSources
         FragColor = vec4(irradiance, 1.0);
     }
     )";
+
+    //uses cube vs
+    const char* fsPreFilter = R"(
+    #version 450 core
+    out vec4 FragColor;
+    in vec3 WorldPos;
+
+    uniform samplerCube environmentMap;
+    uniform float roughness;
+
+    const float PI = 3.14159265359;
+    // ----------------------------------------------------------------------------
+    float DistributionGGX(vec3 N, vec3 H, float roughness)
+    {
+        float a = roughness*roughness;
+        float a2 = a*a;
+        float NdotH = max(dot(N, H), 0.0);
+        float NdotH2 = NdotH*NdotH;
+
+        float nom   = a2;
+        float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+        denom = PI * denom * denom;
+
+        return nom / denom;
+    }
+    // ----------------------------------------------------------------------------
+    // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+    // efficient VanDerCorpus calculation.
+    float RadicalInverse_VdC(uint bits) 
+    {
+         bits = (bits << 16u) | (bits >> 16u);
+         bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+         bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+         bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+         bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+         return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+    }
+    // ----------------------------------------------------------------------------
+    vec2 Hammersley(uint i, uint N)
+    {
+	    return vec2(float(i)/float(N), RadicalInverse_VdC(i));
+    }
+    // ----------------------------------------------------------------------------
+    vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness)
+    {
+	    float a = roughness*roughness;
+	
+	    float phi = 2.0 * PI * Xi.x;
+	    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
+	    float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
+	
+	    // from spherical coordinates to cartesian coordinates - halfway vector
+	    vec3 H;
+	    H.x = cos(phi) * sinTheta;
+	    H.y = sin(phi) * sinTheta;
+	    H.z = cosTheta;
+	
+	    // from tangent-space H vector to world-space sample vector
+	    vec3 up          = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+	    vec3 tangent   = normalize(cross(up, N));
+	    vec3 bitangent = cross(N, tangent);
+	
+	    vec3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
+	    return normalize(sampleVec);
+    }
+    // ----------------------------------------------------------------------------
+    void main()
+    {		
+        vec3 N = normalize(WorldPos);
+    
+        // make the simplifying assumption that V equals R equals the normal 
+        vec3 R = N;
+        vec3 V = R;
+
+        const uint SAMPLE_COUNT = 1024u;
+        vec3 prefilteredColor = vec3(0.0);
+        float totalWeight = 0.0;
+    
+        for(uint i = 0u; i < SAMPLE_COUNT; ++i)
+        {
+            // generates a sample vector that's biased towards the preferred alignment direction (importance sampling).
+            vec2 Xi = Hammersley(i, SAMPLE_COUNT);
+            vec3 H = ImportanceSampleGGX(Xi, N, roughness);
+            vec3 L  = normalize(2.0 * dot(V, H) * H - V); //heres the sample
+
+            float NdotL = max(dot(N, L), 0.0);
+            if(NdotL > 0.0)
+            {
+                // sample from the environment's mip level based on roughness/pdf to reduce spots
+                float D   = DistributionGGX(N, H, roughness);
+                float NdotH = max(dot(N, H), 0.0);
+                float HdotV = max(dot(H, V), 0.0);
+                float pdf = D * NdotH / (4.0 * HdotV) + 0.0001; 
+
+                float resolution = 512.0; // resolution of source cubemap (per face)
+                float saTexel  = 4.0 * PI / (6.0 * resolution * resolution);
+                float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
+                
+                float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel); 
+            
+                prefilteredColor += textureLod(environmentMap, L, mipLevel).rgb * NdotL;
+                totalWeight      += NdotL;
+            }
+        }
+
+        prefilteredColor = prefilteredColor / totalWeight;
+
+        FragColor = vec4(prefilteredColor, 1.0);
+    }
+    
+    )";
+
+    const char* vsBRDF = R"(
+    #version 450 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoords;
+
+    out vec2 TexCoords;
+
+    void main()
+    {
+        TexCoords = aTexCoords;
+	    gl_Position = vec4(aPos, 1.0);
+    }
+
+    )";
+
+    const char* fsBRDF = R"(
+    #version 450 core
+    out vec2 FragColor;
+    in vec2 TexCoords;
+
+    const float PI = 3.14159265359;
+    // ----------------------------------------------------------------------------
+    // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+    // efficient VanDerCorpus calculation.
+    float RadicalInverse_VdC(uint bits) 
+    {
+         bits = (bits << 16u) | (bits >> 16u);
+         bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+         bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+         bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+         bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+         return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+    }
+    // ----------------------------------------------------------------------------
+    vec2 Hammersley(uint i, uint N)
+    {
+	    return vec2(float(i)/float(N), RadicalInverse_VdC(i));
+    }
+    // ----------------------------------------------------------------------------
+    vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness)
+    {
+	    float a = roughness*roughness;
+	
+	    float phi = 2.0 * PI * Xi.x;
+	    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
+	    float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
+	
+	    // from spherical coordinates to cartesian coordinates - halfway vector
+	    vec3 H;
+	    H.x = cos(phi) * sinTheta;
+	    H.y = sin(phi) * sinTheta;
+	    H.z = cosTheta;
+	
+	    // from tangent-space H vector to world-space sample vector
+	    vec3 up          = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+	    vec3 tangent   = normalize(cross(up, N));
+	    vec3 bitangent = cross(N, tangent);
+	
+	    vec3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
+	    return normalize(sampleVec);
+    }
+    // ----------------------------------------------------------------------------
+    float GeometrySchlickGGX(float NdotV, float roughness)
+    {
+        // note that we use a different k for IBL
+        float a = roughness;
+        float k = (a * a) / 2.0;
+
+        float nom   = NdotV;
+        float denom = NdotV * (1.0 - k) + k;
+
+        return nom / denom;
+    }
+    // ----------------------------------------------------------------------------
+    float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+    {
+        float NdotV = max(dot(N, V), 0.0);
+        float NdotL = max(dot(N, L), 0.0);
+        float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+        float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+
+        return ggx1 * ggx2;
+    }
+    // ----------------------------------------------------------------------------
+    vec2 IntegrateBRDF(float NdotV, float roughness)
+    {
+        vec3 V;
+        V.x = sqrt(1.0 - NdotV*NdotV);
+        V.y = 0.0;
+        V.z = NdotV;
+
+        float A = 0.0;
+        float B = 0.0; 
+
+        vec3 N = vec3(0.0, 0.0, 1.0);
+    
+        const uint SAMPLE_COUNT = 1024u;
+        for(uint i = 0u; i < SAMPLE_COUNT; ++i)
+        {
+            // generates a sample vector that's biased towards the
+            // preferred alignment direction (importance sampling).
+            vec2 Xi = Hammersley(i, SAMPLE_COUNT);
+            vec3 H = ImportanceSampleGGX(Xi, N, roughness);
+            vec3 L = normalize(2.0 * dot(V, H) * H - V); //sample vector
+
+            float NdotL = max(L.z, 0.0);
+            float NdotH = max(H.z, 0.0);
+            float VdotH = max(dot(V, H), 0.0);
+
+            if(NdotL > 0.0)
+            {
+                float G = GeometrySmith(N, V, L, roughness);
+                float G_Vis = (G * VdotH) / (NdotH * NdotV);
+                float Fc = pow(1.0 - VdotH, 5.0);
+
+                A += (1.0 - Fc) * G_Vis;
+                B += Fc * G_Vis;
+            }
+        }
+        A /= float(SAMPLE_COUNT);
+        B /= float(SAMPLE_COUNT);
+
+        //return the intergal in the form F0*A + B
+        return vec2(A, B);
+        
+    }
+    // ----------------------------------------------------------------------------
+    void main() 
+    {
+        vec2 integratedBRDF = IntegrateBRDF(TexCoords.x, TexCoords.y);
+        FragColor = integratedBRDF;
+    }
+    )";
+
+
 
 
     const char* fsLight = R"(

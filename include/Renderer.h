@@ -21,6 +21,8 @@ public:
 
     unsigned int environmentCubemap;
     unsigned int irradianceMap;
+    unsigned int preFilterMapRGB;
+    unsigned int brdfLUTRG;
 
 
     Camera* cam;
@@ -107,6 +109,8 @@ private:
     Shader* particleShader;
     Shader* equiToCubeShader;
     Shader* irradianceShader;
+    Shader* prefilterShader;
+    Shader* brdfShader;
     ComputeShader* c;
     ComputeShader* particleUpdateComputeShader;
 
