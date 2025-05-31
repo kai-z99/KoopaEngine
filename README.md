@@ -2,12 +2,26 @@
 
 3D Programming has never been easier!
 
+### PBR/IBL Support
 ![demo1](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR1.gif)
 ![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR2.gif)
-![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
+
+### Cascaded/Variance Shadow Mapping, Terrain, Fog
 ![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoGeneric.gif)
+
+### Forward+ Rendering
 ![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoFwdPlus.gif)
 
+### Particles
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoParticle.gif)
+
+### Fake Subsurface Scattering
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
+
+### And much more...
+
+
+## Example Code
 ```c
 #include "KoopaEngine.h"
 
