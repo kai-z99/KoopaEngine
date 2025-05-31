@@ -89,7 +89,7 @@ int main()
 		ke.ResetMaterial();
 
 		//ke.DrawDirLight(Vec3(-1, -1.0f, -1), Vec3(1.0f, 1.0f, 1.0f), 2.0f, 1);
-		/*
+		
 		//TERRAIN
 		ke.SetCurrentDiffuseTexture("Resources/rock.png");
 		ke.SetCurrentBaseSpecular(0.0f);
