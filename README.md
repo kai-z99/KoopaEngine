@@ -1,6 +1,6 @@
 # KoopaEngine
 
-3D Programming has never been easier! KoopaEngine is an OpenGL based rendering framework.
+3D Programming has never been easier! KoopaEngine is an OpenGL based rendering library.
 
 ### PBR/IBL 
 ![demo1](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR1.gif)
