@@ -15,10 +15,8 @@
 ### Particles
 ![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoParticle.gif)
 
-### Fake Subsurface Scattering
-![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
-
 ### And much more...
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
 
 
 ## Example Code
