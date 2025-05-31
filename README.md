@@ -2,11 +2,11 @@
 
 3D Programming has never been easier!
 
-![demo1](https://github.com/kai-z99/KoopaEngine/blob/master/koopaEngineDemoPBR1.gif)
-![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/koopaEngineDemoPBR2.gif)
-![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/koopaEngineDemoSSS.gif)
-![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/koopaEngineDemoGeneric.gif)
-![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/koopaEngineDemoFwdPlus.gif)
+![demo1](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR1.gif)
+![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR2.gif)
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
+![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoGeneric.gif)
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoFwdPlus.gif)
 
 ```c
 #include "KoopaEngine.h"
