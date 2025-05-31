@@ -100,7 +100,7 @@ constexpr unsigned int MAX_SHADOW_CASTING_POINT_LIGHTS = 4;
 //camera
 constexpr float DEFAULT_EXPOSURE = 0.5f;
 constexpr float DEFAULT_NEAR = 0.1f;
-constexpr float DEFAULT_FAR = 600.0f;
+constexpr float DEFAULT_FAR = 200.0f;
 
 //Tone mapping methods
 enum ToneFunction
