@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "../include/DrawCall.h"
 #include "../include/Shader.h"
 #include "../include/Model.h"
@@ -157,6 +156,8 @@ void DrawCall::BindPBRMaterialUniforms(Shader* shader)
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.ao);
 
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, this->pbrmaterial.height);
 }
 
 void DrawCall::SetLODMesh(MeshData meshData)

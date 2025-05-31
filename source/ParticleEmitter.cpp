@@ -5,8 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <vector>
 
-#include "Shader.h"
-#include "ComputeShader.h"
+#include "../include/Shader.h"
+#include "../include/ComputeShader.h"
 
 ParticleEmitter::ParticleEmitter(glm::mat4 model, unsigned int particleCount, double time)
 {

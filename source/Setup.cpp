@@ -1,11 +1,11 @@
-#include "pch.h"
+//#include "pch.h"
 #include "../include/Setup.h"
 
 #include <glad/glad.h>
 #include <stb_image.h>
 
 #include <iostream>
-#include "Definitions.h"
+#include "../include/Definitions.h"
 
 
 static inline AABB GetAABB(float* vertexData, unsigned int vertexCount, unsigned int stride)
@@ -181,6 +181,32 @@ namespace VertexBufferSetup
         const float TILE_U = 2.0f;   
         const float TILE_V = 2.0f;   
 
+        auto addVertex = [&](const glm::vec3& pos, float uAngle, float vAngle, float uTex, float vTex)
+            {
+                glm::vec3 N = glm::normalize(pos);
+
+                float theta = uAngle * 2.0f * PI;
+                float phi = vAngle * PI;
+                glm::vec3 T = glm::normalize(glm::vec3(
+                    -sin(theta) * sin(phi),
+                    0.0f,
+                    cos(theta) * sin(phi)
+                ));
+
+                float len2 = glm::dot(T, T);
+                T = (len2 > 1e-8f)
+                    ? glm::normalize(T)
+                    : glm::vec3(1.0f, 0.0f, 0.0f);
+
+                vertices.insert(vertices.end(),
+                    {
+                      pos.x, pos.y, pos.z,
+                      N.x,   N.y,   N.z,
+                      uTex,  vTex,
+                      T.x,   T.y,   T.z
+                    });
+            };
+
         for (unsigned int y = 0; y < SPHERE_Y_SEGMENTS; ++y)
         {
             for (unsigned int x = 0; x < SPHERE_X_SEGMENTS; ++x)
@@ -190,13 +216,12 @@ namespace VertexBufferSetup
                 float uAngle1 = (float)(x + 1) / SPHERE_X_SEGMENTS;
                 float vAngle0 = (float)y / SPHERE_Y_SEGMENTS;
                 float vAngle1 = (float)(y + 1) / SPHERE_Y_SEGMENTS;
-
-                float u0 = uAngle0 * TILE_U;
-                float u1 = uAngle1 * TILE_U;
-                float v0 = vAngle0 * TILE_V;
-                float v1 = vAngle1 * TILE_V;
-
- 
+                    
+                float uTex0 = uAngle0 * TILE_U;
+                float uTex1 = uAngle1 * TILE_U;
+                float vTex0 = vAngle0 * TILE_V;
+                float vTex1 = vAngle1 * TILE_V;
+    
                 auto evalPos = [](float u, float v) {
                     float theta = u * 2.0f * PI;
                     float phi = v * PI;
@@ -211,22 +236,15 @@ namespace VertexBufferSetup
                 glm::vec3 p3 = evalPos(uAngle1, vAngle1);
 
 
-                auto addVertex = [&](const glm::vec3& pos, float u, float v)
-                    {
-                        vertices.insert(vertices.end(),
-                            { pos.x, pos.y, pos.z,       
-                              pos.x, pos.y, pos.z,            
-                              u, v,                           
-                              -sin(u * 2 * PI), 0.0f, cos(u * 2 * PI) }); 
-                    };
+                
 
-                addVertex(p0, u0, v0);
-                addVertex(p1, u1, v0);
-                addVertex(p2, u0, v1);
+                addVertex(p0, uAngle0, vAngle0, uTex0, vTex0);
+                addVertex(p1, uAngle1, vAngle0, uTex1, vTex0);
+                addVertex(p2, uAngle0, vAngle1, uTex0, vTex1);
 
-                addVertex(p1, u1, v0);
-                addVertex(p3, u1, v1);
-                addVertex(p2, u0, v1);
+                addVertex(p1, uAngle1, vAngle0, uTex1, vTex0);
+                addVertex(p3, uAngle1, vAngle1, uTex1, vTex1);
+                addVertex(p2, uAngle0, vAngle1, uTex0, vTex1);
             }
         }
 

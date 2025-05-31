@@ -91,7 +91,16 @@ namespace ShaderSources
         sampler2D metallic;
         sampler2D roughness;
         sampler2D ao;
+        sampler2D height;
     };
+
+    vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+    {
+        return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    } 
+
+    vec2 ParallaxOcclusionMap(vec2 texCoords, vec3 viewDir, sampler2D heightMap);
+
 
     //IN VARIABLES--------------------------------------------------------------------------------
     in vec2 TexCoords;
@@ -113,6 +122,7 @@ namespace ShaderSources
     //TERRAIN TEXTURE                                //9
     uniform sampler2D ssao;                          //10
     uniform sampler2D brdfLUT;                       //11
+    //pbrmaterial.height                             //12
     
     //SHARED UNIFORMS---------------------------------------------------------------------
     //light
@@ -160,11 +170,6 @@ namespace ShaderSources
     float CalculateLinearFog();
 
     const float gamma = 2.2;
-
-    vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
-    {
-        return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-    } 
 
     layout(std430, binding = 1) buffer Lights
     {
@@ -224,14 +229,15 @@ namespace ShaderSources
         }
         else
         {            
-            vec3 albedo = pow(texture(PBRmaterial.albedo, TexCoords).rgb, vec3(gamma)); //linear space
-            vec3 N = texture(PBRmaterial.normal, TexCoords).xyz;
+            vec2 offsetTexCoords = ParallaxOcclusionMap(TexCoords, normalize(transpose(TBN) * viewDir), PBRmaterial.height);
+            vec3 albedo = pow(texture(PBRmaterial.albedo, offsetTexCoords).rgb, vec3(gamma)); //linear space
+            vec3 N = texture(PBRmaterial.normal, offsetTexCoords).xyz;
             N = N * 2.0f - 1.0f; //[0,1] -> [-1, 1]
             N = normalize(TBN * N); //Tangent -> World (tbn is constucted with model matrix)
-            float metallic = texture(PBRmaterial.metallic, TexCoords).r;
-            float roughness = texture(PBRmaterial.roughness, TexCoords).r;
+            float metallic = texture(PBRmaterial.metallic, offsetTexCoords).r;
+            float roughness = texture(PBRmaterial.roughness, offsetTexCoords).r;
             //roughness = max(roughness, 0.04); //avoid sparkling
-            float ao = texture(PBRmaterial.ao, TexCoords).r;
+            float ao = texture(PBRmaterial.ao, offsetTexCoords).r;
             vec3 reflectionDir = reflect(-viewDir, N);
             
             //Calculate Lo = full integral for each point light (both spec and scatter components)
@@ -277,6 +283,8 @@ namespace ShaderSources
 
         if (hasAlpha && !usingPBR) FragColor = vec4(color, texture(material.diffuse, TexCoords).a);
         else FragColor = vec4(color, 1.0f);
+
+        //FragColor = vec4( (ParallaxOcclusionMap(TexCoords, normalize(transpose(TBN) * viewDir), PBRmaterial.height) - TexCoords)*5.0 + 0.5, 0.0, 1.0 );
     }
 
     //SHADOWS
@@ -367,7 +375,7 @@ namespace ShaderSources
             
         float pMax = variance / (variance + (d * d));
 
-        float shadow = LightBleedReduction(pMax, 0.25f);
+        float shadow = LightBleedReduction(pMax, 0.35f);
         return clamp(shadow, 0.0f, 1.0f); 
     }
 
@@ -508,6 +516,52 @@ namespace ShaderSources
             float shadow = CascadeShadowCalculation(FragPos, normal, -direction);
             return shadow * (diffuse + specular);
         }
+    }
+
+    vec2 ParallaxOcclusionMap(vec2 texCoords, vec3 viewDir, sampler2D depthMap)
+    {
+        const float heightScale = 0.07f;
+
+        const float minLayers = 8.0f;
+        const float maxLayers = 24.0f;
+
+        //(0,0,1) is up in tangent space. More layers at lower angles
+        float numLayers = mix(maxLayers, minLayers, abs(dot(vec3(0,0,1), viewDir)));
+        
+        float layerDepth = 1.0f / numLayers;
+
+        //max shift amount, based on cos(theta) = viewDir.z
+        vec2 P = viewDir.xy / max(viewDir.z, 0.1) * heightScale;
+        //note this point toward the viewDir since it comes from viewDir projected
+
+        vec2 deltaTexCoords = P / numLayers;
+        vec2 currentTexCoords = texCoords;
+        float currentDepthMapValue = 1 - texture(depthMap, currentTexCoords).r;
+
+        float currentLayerDepth = 0.0f;
+        while (currentLayerDepth < currentDepthMapValue) //curr is "above" the depth
+        {
+            //push away is subtract since P pointed towards view
+            currentTexCoords -= deltaTexCoords;
+            currentDepthMapValue = 1 - texture(depthMap, currentTexCoords).r;
+            
+            currentLayerDepth += layerDepth;
+        }
+
+        //pull once towards cam
+        vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
+        float prevDepthMapValue = 1 - texture(depthMap, prevTexCoords).r;
+        float prevLayerDepth = currentLayerDepth - layerDepth;        
+
+        //get depth error: height - marchDepth
+        float depthDeltaCurr = currentDepthMapValue - currentLayerDepth;    
+        float depthDeltaPrev = prevDepthMapValue - prevLayerDepth;
+        
+        //lerp bewteen the before collision depth and after collision depth
+        float weight = depthDeltaCurr / (depthDeltaCurr - depthDeltaPrev);
+        vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);
+
+        return finalTexCoords;
     }
 
     //PBR FUNCTIONS
@@ -985,6 +1039,7 @@ namespace ShaderSources
     // ----------------------------------------------------------------------------
     vec2 IntegrateBRDF(float NdotV, float roughness)
     {
+        //resolve the view vector  (in local coords)
         vec3 V;
         V.x = sqrt(1.0 - NdotV*NdotV);
         V.y = 0.0;
@@ -993,7 +1048,7 @@ namespace ShaderSources
         float A = 0.0;
         float B = 0.0; 
 
-        vec3 N = vec3(0.0, 0.0, 1.0);
+        vec3 N = vec3(0.0, 0.0, 1.0); //define an up, since we are working with n dot v a scalar angle
     
         const uint SAMPLE_COUNT = 1024u;
         for(uint i = 0u; i < SAMPLE_COUNT; ++i)
@@ -1010,7 +1065,7 @@ namespace ShaderSources
 
             if(NdotL > 0.0)
             {
-                float G = GeometrySmith(N, V, L, roughness);
+                float G = GeometrySmith(N, V, L, roughness); //luckily, this function on depends on n dot v (n relative to v), not true V.
                 float G_Vis = (G * VdotH) / (NdotH * NdotV);
                 float Fc = pow(1.0 - VdotH, 5.0);
 
@@ -2053,7 +2108,7 @@ namespace ShaderSources
         uint tileID = tileCoords.y * groupCount.x + tileCoords.x;
         uint base = tileID * MAX_LIGHTS_PER_TILE;
 
-        if (gl_LocalInvocationIndex == 0) counts[tileID] = 0u;
+        if (gl_LocalInvocationIndex == 0u) counts[tileID] = 0u;
         memoryBarrierBuffer();
         barrier();
 
@@ -2111,7 +2166,7 @@ namespace ShaderSources
         memoryBarrierBuffer(); 
         barrier();
 
-        if (gl_LocalInvocationID == 0u)
+        if (gl_LocalInvocationIndex == 0u)
         {
             counts[tileID] = min(counts[tileID], MAX_LIGHTS_PER_TILE);
         }

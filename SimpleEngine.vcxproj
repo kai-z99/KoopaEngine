@@ -76,7 +76,8 @@
     </LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\repos\C++\extern\include;$(IncludePath);</IncludePath>
+    <IncludePath>$(ProjectDir)extern\include;$(IncludePath)</IncludePath>
+    <LibraryPath />
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -137,9 +138,10 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -177,14 +179,21 @@
     <ClInclude Include="KoopaEngine.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Definitions.cpp" />
-    <ClCompile Include="glad\glad.c" />
+    <ClCompile Include="glad\glad.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\Constants.cpp" />
     <ClCompile Include="source\DrawCall.cpp" />
-    <ClCompile Include="source\helpers.cpp" />
+    <ClCompile Include="source\helpers.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\KoopaEngine.cpp" />
-    <ClCompile Include="source\ParticleEmitter.cpp" />
-    <ClCompile Include="source\pch.cpp" />
+    <ClCompile Include="source\ParticleEmitter.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="source\pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\Renderer.cpp" />
     <ClCompile Include="source\Setup.cpp" />
     <ClCompile Include="source\SimpleEngine.cpp" />

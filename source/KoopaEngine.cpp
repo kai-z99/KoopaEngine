@@ -1,4 +1,4 @@
-#include "pch.h"
+//#include "pch.h"
 #include "../include/framework.h"
 #include "../KoopaEngine.h"
 
@@ -123,9 +123,9 @@ void KoopaEngine::SetCurrentBaseSpecular(float specular)
     this->renderer->SetBaseSpecular(specular);
 }
 
-void KoopaEngine::SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao)
+void KoopaEngine::SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* height, const char* metallic, const char* roughness, const char* ao)
 {
-    this->renderer->SetCurrentPBRMaterial(albedo, normal, metallic, roughness, ao);
+    this->renderer->SetCurrentPBRMaterial(albedo, normal, height, metallic, roughness, ao);
 }
 
 void KoopaEngine::SetFogColor(Vec3 col)

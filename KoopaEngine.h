@@ -27,7 +27,7 @@ public:
     void SetCurrentNormalTexture(const char* path);
     void SetCurrentSpecularTexture(const char* path);
     void SetCurrentBaseSpecular(float specular);
-    void SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao);
+    void SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* height, const char* metallic, const char* roughness, const char* ao);
     void SetFogColor(Vec3 col);
     void SetFogType(FogType type);
     void SetExpFogDensity(float density);

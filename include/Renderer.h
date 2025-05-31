@@ -17,12 +17,15 @@ class Renderer
 {
 public:
     //TEMP
-    bool usingPBR = true;
+    bool usingPBR = false;
 
     unsigned int environmentCubemap;
     unsigned int irradianceMap;
     unsigned int preFilterMapRGB;
     unsigned int brdfLUTRG;
+
+    unsigned int captureFBO;
+    unsigned int captureRBO;
 
 
     Camera* cam;
@@ -61,7 +64,7 @@ public:
     void SetCurrentBaseColor(Vec3 col);
     void SetCurrentNormal(const char* path);
     void SetCurrentSpecular(const char* path);
-    void SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* metallic, const char* roughness, const char* ao);
+    void SetCurrentPBRMaterial(const char* albedo, const char* normal, const char* height, const char* metallic, const char* roughness, const char* ao);
     void SetBaseSpecular(float spec);
     void SetSkybox(const std::vector<const char*>& faces);
     void SetExposure(float exposure);
@@ -79,6 +82,8 @@ private:
     void SetupVertexBuffers();
     void SetupFramebuffers();
     void SetupSSAOData();
+    void SetupEnvironmentCubeMap();
+    void SetupIBLMaps();
 
     //RENDER PASSES
     void RenderShadowMaps();
@@ -186,7 +191,7 @@ private:
     std::vector<glm::mat4> GetCascadeMatrices();
     void RenderCascadedShadowMap();
     //point
-    unsigned int P_SHADOW_WIDTH = 512, P_SHADOW_HEIGHT = 512;
+    unsigned int P_SHADOW_WIDTH = 1024, P_SHADOW_HEIGHT = 1024;
     std::vector<glm::mat4> shadowTransforms;
     void RenderPointShadowMap(unsigned int index);
     void BlurPointShadowMap(unsigned int index);
