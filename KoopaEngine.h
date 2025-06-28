@@ -12,7 +12,7 @@ class Renderer;
 
 class KoopaEngine {
 public:
-    KoopaEngine();        
+    KoopaEngine(bool PBR);        
     ~KoopaEngine();
             
     bool shouldCloseWindow() const;
@@ -34,6 +34,7 @@ public:
     void SetLinearFogStart(float start);
     void SetAmbientLighting(float ambient);
     void SetBloomThreshold(float threshold);
+    void SetEnvironmentMap(const char* path);
 
     void SetSkybox(const std::vector<const char*>& faces);
 

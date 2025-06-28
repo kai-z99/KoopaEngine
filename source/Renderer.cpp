@@ -24,8 +24,11 @@ static inline float ourLerp(float a, float b, float f)
     return a + f * (b - a);
 }
 
-Renderer::Renderer()
+Renderer::Renderer(bool PBR)
 {
+    this->usingPBR = PBR;
+
+    //opengl states
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE); 
@@ -48,16 +51,15 @@ Renderer::Renderer()
     this->fogType = EXPONENTIAL_SQUARED;
     this->msaa = true;
     
-    // shaders
+    //shaders
     this->InitializeShaders();
 
-    //NOTE: DO THIS AFTER THE POINT LIGHT VECTOR IS INITIALIZED... facepalm
+    //buffers
     this->SetupFramebuffers();
     this->SetupVertexBuffers();
 
-   
     //LIGHTING-------------------------------------------------
-    //Initialialize lighting
+    //Initialialize lighting defaults
     this->bloomThreshold = 1.0f;
     this->ambientLighting = 0.015f;
     this->InitializeDirLight();
@@ -82,14 +84,7 @@ Renderer::Renderer()
     glGetIntegerv(GL_MAJOR_VERSION, &major);
     glGetIntegerv(GL_MINOR_VERSION, &minor);
     printf("OpenGL version: %d.%d\n", major, minor);
-    printf("%s\n", glGetString(GL_VERSION));
-
-    if (this->usingPBR)
-    {
-        this->SetupEnvironmentCubeMap();
-        this->SetupIBLMaps();
-    }
-    
+    printf("%s\n", glGetString(GL_VERSION));    
 }
 
 void Renderer::InitializeShaders()
@@ -303,9 +298,9 @@ void Renderer::SetupSSAOData()
     }
 }
 
-void Renderer::SetupEnvironmentCubeMap()
+void Renderer::SetupEnvironmentCubeMap(const char* path)
 {
-
+   
     //IBL setup
     glGenFramebuffers(1, &captureFBO);
     glGenRenderbuffers(1, &captureRBO);
@@ -315,11 +310,9 @@ void Renderer::SetupEnvironmentCubeMap()
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
 
-    // pbr: load the HDR environment map
-    // ---------------------------------
     stbi_set_flip_vertically_on_load(true);
     int width, height, nrComponents;
-    float* data = stbi_loadf("../ShareLib/Resources/lakeside_night_4k.hdr", &width, &height, &nrComponents, 0);
+    float* data = stbi_loadf(path, &width, &height, &nrComponents, 0);
     unsigned int hdrTexture;
     if (data)
     {
@@ -340,8 +333,6 @@ void Renderer::SetupEnvironmentCubeMap()
     }
     stbi_set_flip_vertically_on_load(false);
 
-    // pbr: setup cubemap to render to and attach to framebuffer
-    // ---------------------------------------------------------
     glGenTextures(1, &this->environmentCubemap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->environmentCubemap);
     for (unsigned int i = 0; i < 6; ++i)
@@ -354,8 +345,6 @@ void Renderer::SetupEnvironmentCubeMap()
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); //dot artifacts
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // pbr: set up projection and view matrices for capturing data onto the 6 cubemap face directions
-    // ----------------------------------------------------------------------------------------------
     glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     glm::mat4 captureViews[] =
     {
@@ -367,8 +356,6 @@ void Renderer::SetupEnvironmentCubeMap()
         glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
     };
 
-    // pbr: convert HDR equirectangular environment map to cubemap equivalent
-    // ----------------------------------------------------------------------
     this->equiToCubeShader->use();
     this->equiToCubeShader->setInt("equirectangularMap", 0);
     glUniformMatrix4fv(glGetUniformLocation(this->equiToCubeShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(captureProjection));
@@ -393,6 +380,9 @@ void Renderer::SetupEnvironmentCubeMap()
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->environmentCubemap);
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
+    this->usingSkybox = true;
+    this->currentSkyboxTexture = this->environmentCubemap;
+    SetupIBLMaps();
 }
 
 void Renderer::SetupIBLMaps()
@@ -408,8 +398,6 @@ void Renderer::SetupIBLMaps()
         glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
     };
 
-    // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
-    // --------------------------------------------------------------------------------
     glGenTextures(1, &this->irradianceMap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->irradianceMap);
     for (unsigned int i = 0; i < 6; ++i)
@@ -426,9 +414,6 @@ void Renderer::SetupIBLMaps()
     glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
 
-
-    // pbr: solve diffuse integral by convolution to create an irradiance (cube)map.
-    // -----------------------------------------------------------------------------
     this->irradianceShader->use();
     this->irradianceShader->setInt("environmentMap", 0);
     glUniformMatrix4fv(glGetUniformLocation(this->irradianceShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(captureProjection));
@@ -454,9 +439,6 @@ void Renderer::SetupIBLMaps()
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->irradianceMap);
     glActiveTexture(GL_TEXTURE0);
 
-
-    // pbr: create a pre-filter cubemap, and re-scale capture FBO to pre-filter scale.
-    // --------------------------------------------------------------------------------
     glGenTextures(1, &this->preFilterMapRGB);
     glBindTexture(GL_TEXTURE_CUBE_MAP, this->preFilterMapRGB);
     for (unsigned int i = 0; i < 6; ++i)
@@ -466,12 +448,12 @@ void Renderer::SetupIBLMaps()
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // be sure to set minification filter to mip_linear 
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // generate mipmaps for the cubemap so OpenGL automatically allocates the required memory.
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
-    // pbr: run a quasi monte-carlo simulation on the environment lighting to create a prefilter cubemap.
+
    // ----------------------------------------------------------------------------------------------------
     this->prefilterShader->use();
     this->prefilterShader->setInt("environmentMap", 0);
@@ -507,20 +489,17 @@ void Renderer::SetupIBLMaps()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
-    // pbr: generate a 2D LUT from the BRDF equations used.
-    // ----------------------------------------------------
     glGenTextures(1, &this->brdfLUTRG);
 
     // pre-allocate enough memory for the LUT texture.
     glBindTexture(GL_TEXTURE_2D, this->brdfLUTRG);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 512, 512, 0, GL_RG, GL_FLOAT, 0);
-    // be sure to set wrapping mode to GL_CLAMP_TO_EDGE
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // then re-configure capture framebuffer object and render screen-space quad with BRDF shader.
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
     glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
@@ -560,23 +539,62 @@ void Renderer::InitializeDirLight()
 
 Renderer::~Renderer()
 {
-    //VBO/VAO
-    glDeleteVertexArrays(1, &this->triangleMeshData.VAO);
-    glDeleteVertexArrays(1, &this->screenQuadMeshData.VAO);
+    //VAO
+    GLuint vaos[] = { triangleMeshData.VAO, cubeMeshData.VAO, planeMeshData.VAO,
+                      sphereMeshData.VAO, screenQuadMeshData.VAO, skyboxMeshData.VAO };
+    glDeleteVertexArrays(std::size(vaos), vaos);
 
-    //delete VBOs? reference is lost right now.
+    /* Delete textures */
+    std::vector<GLuint> tex;
+    tex.reserve(textureToID.size() + 32);      
 
-    delete this->lightingShader;
-    delete this->debugLightShader;
-    delete this->screenShader;
+    for (auto& [_, id] : textureToID) tex.push_back(id);
+    tex.insert(tex.end(),
+        { environmentCubemap, irradianceMap, preFilterMapRGB, brdfLUTRG,
+          hdrTextureRGBA, hdrMSAATextureRGBA,
+          gNormalTextureRGBA, gPositionTextureRGBA,
+          cascadeShadowMapTextureArrayDepth,
+          pointShadowMapTextureArrayRG,
+          vsmBlurTextureArrayRG[0], vsmBlurTextureArrayRG[1],
+          twoPassBlurTexturesRGBA[0], twoPassBlurTexturesRGBA[1],
+          ssaoQuadTextureR, ssaoBlurTextureR, ssaoNoiseTexture,
+          halfResBrightTextureRGBA });
+    glDeleteTextures((GLsizei)tex.size(), tex.data());
 
-    for (DrawCall* d : this->drawCalls) delete d;
-}
+    /* Delete FBOs / RBOs / SSBOs --------------------------------------- */
+    GLuint fbos[] = { hdrFBO, hdrMSAAFBO, gBufferFBO, halfResBrightFBO,
+                      cascadeShadowMapFBO, pointShadowMapFBO,
+                      ssaoFBO, ssaoBlurFBO,
+                      twoPassBlurFBOs[0], twoPassBlurFBOs[1],
+                      vsmBlurFBO[0], vsmBlurFBO[1] };
+    glDeleteFramebuffers(std::size(fbos), fbos);
 
-void Renderer::BeginRenderFrame()
-{
-    //glBindFramebuffer(GL_FRAMEBUFFER, this->hdrFBO); //off screen render
-    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    GLuint rbos[] = { captureRBO };
+    glDeleteRenderbuffers(std::size(rbos), rbos);
+
+    GLuint ssbos[] = { lightSSBO, countSSBO, indexSSBO };
+    glDeleteBuffers(std::size(ssbos), ssbos);
+
+    /* Delete shader/program objects ------------------------------------ */
+    auto kill = [](auto*& p) { delete p; p = nullptr; };
+
+    kill(lightingShader);   kill(debugLightShader);   kill(screenShader);
+    kill(brightShader);     kill(blurShader);
+    kill(dirShadowShader);  kill(cascadeShadowShader); kill(pointShadowShader);
+    kill(skyShader);        kill(terrainShader);
+    kill(geometryPassShader);
+    kill(ssaoShader);       kill(ssaoBlurShader);
+    kill(vsmPointBlurShader);
+    kill(equiToCubeShader); kill(irradianceShader);
+    kill(prefilterShader);  kill(brdfShader);
+
+    kill(particleUpdateComputeShader);
+    kill(tileCullShader);
+
+    /* Delete heap objects ---------------------------------------------- */
+    for (DrawCall* d : drawCalls)       delete d;
+    for (auto* p : particleEmitters)    delete p;
+    for (auto& [_, m] : pathToModel)    delete m;
 }
 
 void Renderer::EndRenderFrame()
@@ -1430,8 +1448,6 @@ void Renderer::SetSkybox(const std::vector<const char*>& faces)
 {
     this->currentSkyboxTexture = TextureSetup::LoadTextureCubeMap(faces);
     this->usingSkybox = true;
-
-    if (usingPBR) this->currentSkyboxTexture = this->environmentCubemap;
 }
 
 void Renderer::SetExposure(float exposure)

@@ -16,9 +16,6 @@ class ParticleEmitter;
 class Renderer
 {
 public:
-    //TEMP
-    bool usingPBR = false;
-
     unsigned int environmentCubemap;
     unsigned int irradianceMap;
     unsigned int preFilterMapRGB;
@@ -31,12 +28,11 @@ public:
     Camera* cam;
 
     //Construction
-	Renderer();
+	Renderer(bool PBR);
 	~Renderer();
     
     
-    //Begin/End frame
-    void BeginRenderFrame();
+    //End frame
     void EndRenderFrame();
 
     //Drawing Functions
@@ -74,15 +70,18 @@ public:
     void SetLinearFogStart(float start);
     void SetAmbientLighting(float ambient);
     void SetBloomThreshold(float threshold);
+    void SetupEnvironmentCubeMap(const char* path);
+
 
 private:
+    bool usingPBR;
+
     //CONSTRUCTOR 
     void InitializeShaders();
     void InitializeDirLight();
     void SetupVertexBuffers();
     void SetupFramebuffers();
     void SetupSSAOData();
-    void SetupEnvironmentCubeMap();
     void SetupIBLMaps();
 
     //RENDER PASSES

@@ -620,7 +620,7 @@ namespace ShaderSources
 
         vec3 Lo = vec3(0.0);
         vec3 lightDir = normalize(light.positionRange.xyz - fragPos);
-        vec3 halfway = normalize(viewDir + lightDir);
+        vec3 halfway = normalize(viewDir + lightDir); //micro facet normal
 
         float distance = length(light.positionRange.xyz - fragPos);
         float maxDistance = light.positionRange.w;
@@ -828,7 +828,7 @@ namespace ShaderSources
             for(float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
             {
                 // spherical to cartesian (in tangent space)
-                vec3 tangentSample = vec3(sin(theta) * cos(phi),  sin(theta) * sin(phi), cos(theta));
+                vec3 tangentSample = vec3(sin(theta) * cos(phi),  sin(theta) * sin(phi), cos(theta)); //cos theta is dot(N,L)
                 // tangent space to world
                 vec3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * N; 
 
@@ -1030,7 +1030,7 @@ namespace ShaderSources
     float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
     {
         float NdotV = max(dot(N, V), 0.0);
-        float NdotL = max(dot(N, L), 0.0);
+        float NdotL = max(dot(N, L), 0.0); //heres n dot l
         float ggx2 = GeometrySchlickGGX(NdotV, roughness);
         float ggx1 = GeometrySchlickGGX(NdotL, roughness);
 
@@ -1065,8 +1065,9 @@ namespace ShaderSources
 
             if(NdotL > 0.0)
             {
-                float G = GeometrySmith(N, V, L, roughness); //luckily, this function on depends on n dot v (n relative to v), not true V.
-                float G_Vis = (G * VdotH) / (NdotH * NdotV);
+                float G = GeometrySmith(N, V, L, roughness); //luckily, this function on depends on n dot v (n relative to v), not true V. 
+                //note: dot(n,l) is in G too.
+                float G_Vis = (G * VdotH) / (NdotH * NdotV); 
                 float Fc = pow(1.0 - VdotH, 5.0);
 
                 A += (1.0 - Fc) * G_Vis;
@@ -2060,7 +2061,7 @@ namespace ShaderSources
 
     const char* csTileCulling = R"(
     #version 450 core
-    layout(local_size_x = 16, local_size_y = 16) in; //16x16 threads per work group
+    layout(local_size_x = 16, local_size_y = 16) in; //16x16 = 256 threads per work group (one work group per tile)
     
     struct GPUPointLight {    
         vec4 positionRange;   
@@ -2075,11 +2076,14 @@ namespace ShaderSources
         GPUPointLight lights[];  
     };
 
+    //Each tile occupies a contingous block of size MAX_LIGHTS_PER_TILE
+    //Given a tile (x,y), index with base + index, where base = (tileCoords.y * groupCount.x + tileCoords.x) * MAX_LIGHT_PER_TILE
     layout(std430, binding = 2) buffer TileIndices
     {
         uint indices[];
     };
     
+    //index represents lights affecting tileID.
     layout(std430, binding = 3) buffer TileCount
     {
         uint counts[];
@@ -2093,26 +2097,39 @@ namespace ShaderSources
 
     const uint MAX_LIGHTS_PER_TILE = 256u;
     const uint tileSize = 16u;
-    uniform int numLights;
+    uniform int numLights; //num of valid entries in lights[]
                  
     void main()
     {
         uvec2 tileCoords = gl_WorkGroupID.xy;
-        uvec2 groupCount = uvec2( (screen + tileSize - 1u) / tileSize );
+        uvec2 groupCount = uvec2( (screen + tileSize - 1u) / tileSize ); //eg for x: ceil(1920/16) = 120
 
-        if (tileCoords.x >= groupCount.x || tileCoords.y >= groupCount.y)
+        if (tileCoords.x >= groupCount.x || tileCoords.y >= groupCount.y) //if screen dimension is not divisible by 16
         {
             return;
         }
 
-        uint tileID = tileCoords.y * groupCount.x + tileCoords.x;
+        uint tileID = tileCoords.y * groupCount.x + tileCoords.x; //Flatten tile coords (x,y) into an int, allowing us to index the indices[] and counts[] array.
         uint base = tileID * MAX_LIGHTS_PER_TILE;
+            
+        if (gl_LocalInvocationIndex == 0u) counts[tileID] = 0u; 
+        //gl_LocalInvocationIndex in this case one px of the tile, since each tile is 16x16, matching the workgroup size.
+        //we designate thread 0 to zero out the count for this tile.
 
-        if (gl_LocalInvocationIndex == 0u) counts[tileID] = 0u;
         memoryBarrierBuffer();
-        barrier();
+        // once memoryBarrierBuffer() returns, you know for sure that any thread reading from SSBOs 
+        // previously (on any shader invocation) will see the updated value (in our case, zero). (no batching)
 
-        //corners
+        barrier();
+        //workgroup wide sync point
+
+        //So it goes like:
+        //1.) Thread 0 writes counts[tileID] = 0;
+        //2.) memoryBarrierBuffer() ensures that store is visible.
+        //3.) all threads wait on barrier().
+        //4.) After the barrier, every thread sees counts[tileID] = 0. 
+
+        //corners of the current tile in pixel space
         vec2 pxMin = vec2(tileCoords) * tileSize;
         vec2 pxMax = pxMin + tileSize;
         
@@ -2120,7 +2137,7 @@ namespace ShaderSources
         //t2    -> lights[1],   lights[257], lights[513] ...
         // ...
         //t255  -> lights[255], lights[511], lights[767] ...
-        for (uint i = gl_LocalInvocationIndex; i < uint(numLights); i += tileSize * tileSize)
+        for (uint i = gl_LocalInvocationIndex; i < uint(numLights); i += tileSize * tileSize) 
         {
             GPUPointLight l = lights[i];
             if (l.isActive == 0u) continue;
@@ -2129,6 +2146,11 @@ namespace ShaderSources
             vec4 viewPos = view * vec4(l.positionRange.xyz, 1.0f);
             float z = -viewPos.z;
 
+            // (radius / z) * projection[1][1] is the radius in NDC units.
+            // the rest converts to pixel space [(0,0),screenDimensions]
+            // note that multiplying by screen.y * 0.5 converts to pixel space because NDCy is [-1,1] (bottom and top of the screen)
+            // therefore one NDC unit is screen.y/2 (NDC is [0,1])
+            //
             float radius = l.positionRange.w;
             float radiusScreenSpace = (radius / z) * projection[1][1] * screen.y * 0.5;
             
@@ -2149,6 +2171,8 @@ namespace ShaderSources
             if (inside)
             {
                 //NOTE: Without atomic add:
+                //      counts[tileID] += 1 
+                //expands to:
                 //      uint old = counts[tileID];
                 //      counts[tileID] = old + 1;
                 //
@@ -2163,9 +2187,12 @@ namespace ShaderSources
             }
         }
 
+        //sync all threads up...
         memoryBarrierBuffer(); 
         barrier();
-
+        //tile is done
+            
+        //use thread 0 to clamp. Thread 0 is arbitrary we just want to do it once per tile.
         if (gl_LocalInvocationIndex == 0u)
         {
             counts[tileID] = min(counts[tileID], MAX_LIGHTS_PER_TILE);

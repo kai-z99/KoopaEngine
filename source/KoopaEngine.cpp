@@ -14,7 +14,7 @@
 
 #include <iostream>
 
-KoopaEngine::KoopaEngine() {
+KoopaEngine::KoopaEngine(bool PBR) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
@@ -44,7 +44,7 @@ KoopaEngine::KoopaEngine() {
     }
 
     this->camera = new Camera(glm::vec3(0.0f, 0.0f, 4.0f));
-    this->renderer = new Renderer();
+    this->renderer = new Renderer(PBR);
 }
 
 KoopaEngine::~KoopaEngine() 
@@ -157,6 +157,12 @@ void KoopaEngine::SetBloomThreshold(float threshold)
 {
     this->renderer->SetBloomThreshold(threshold);
 }
+
+void KoopaEngine::SetEnvironmentMap(const char* path)
+{
+    this->renderer->SetupEnvironmentCubeMap(path);
+}
+
 
 void KoopaEngine::SetSkybox(const std::vector<const char*>& faces)
 {
