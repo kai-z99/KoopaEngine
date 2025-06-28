@@ -1,8 +1,8 @@
 # KoopaEngine
 
-3D Programming has never been easier!
+3D Programming has never been easier! KoopaEngine is an OpenGL based rendering library.
 
-### PBR/IBL Support
+### PBR/IBL 
 ![demo1](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR1.gif)
 ![demo2](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoPBR2.gif)
 
@@ -15,10 +15,8 @@
 ### Particles
 ![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoParticle.gif)
 
-### Fake Subsurface Scattering
-![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
-
 ### And much more...
+![demo3](https://github.com/kai-z99/KoopaEngine/blob/master/demo/koopaEngineDemoSSS.gif)
 
 
 ## Example Code
